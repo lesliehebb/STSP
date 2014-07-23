@@ -15,6 +15,7 @@
 #define DOWNFROMMAX 11			//how many light curve points down from the max to call the max (for normalization) 
 #define CALCBRIGHTNESSFACTOR 1	//whether to match normalization by calculating the brightness factor (don't use DOWNFROMMAX)
 #define MCMCTRACKMEM 200000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
+#define PRECALCPLANET 1			//1 -> optimize by precalculating planet effect at each time
 
 #define MAXSPOTS 10
 #define MAXPLANETS 1
@@ -188,6 +189,10 @@ tscirclearc scirclearc[FOURMAXSPOTSMAXPLANETS];
 tpcirclearc pcirclearc[TWICEMAXSPOTSMAXPLANETS];
 tlinesegment linesegment[TWICEMAXSPOTSMAXPLANETS];
 ttotalnum totalnum;
+#if PRECALCPLANET
+	tcircle *indcircle[MAXPLANETS];
+	int *totalnumcircle;
+#endif
 
 typedef struct 
 {
@@ -2355,6 +2360,74 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 	}
 	return thelightness;
 }
+#if PRECALCPLANET
+double lightnessindexed(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int timeindex)
+{
+	int i,j,realnumplanets;
+	double totlight,morelight,torig,thelightness;
+
+#	if ANYPRINTVIS
+		if(PRINTVIS)
+			return lightness(t,star,planet,spot);	//doesn't work with printvis
+#	endif
+
+	torig=t/86400.0+planet->lct0;
+	zerototalnums();
+
+	star->phi=star->omega*t;
+
+	totalnum.circle=totalnumcircle[timeindex];
+	for(i=0;i<totalnum.circle;i++)
+	{
+		circle[i].centery=indcircle[i][timeindex].centery; circle[i].centerz=indcircle[i][timeindex].centerz;
+		circle[i].radius=indcircle[i][timeindex].radius; circle[i].area=indcircle[i][timeindex].area; circle[i].rsq=indcircle[i][timeindex].rsq;
+		circle[i].mindcen=indcircle[i][timeindex].mindcen;circle[i].maxdcen=indcircle[i][timeindex].maxdcen;
+		circle[i].numstarint=indcircle[i][timeindex].numstarint;
+		if(circle[i].numstarint>0)
+		{
+			circle[i].starintdang=indcircle[i][timeindex].starintdang;
+			circle[i].starintbeta[0]=indcircle[i][timeindex].starintbeta[0];circle[i].starintbeta[1]=indcircle[i][timeindex].starintbeta[1];
+		}
+	}
+
+	updatespots(spot,star->r,star->phi);
+	for(i=0;i<numspots;i++)
+		if(spot[i].psi-spot[i].alpha<PIo2)	//spot visable
+			createellipsecresent(i,spot[i],star->r);
+	checkoverlap(star->r);	//create disjoint shapes that block light
+
+	totlight=realstararea(star->r)*star->dintensity[NLDRINGS-1];
+	if(PRINTEACHSPOT) 
+		for(i=0;i<numspots;i++)
+			spotreport[i]=ldspotreport[i]*star->dintensity[NLDRINGS-1];
+
+	for(i=NLDRINGS-2;i>=0;i--)
+	{
+		debugringi=i;
+		morelight=ldstararea(star->ringr[i])*star->dintensity[i];
+		if(errorflag>100)
+			morelight=fixldstararea(star,i)*star->dintensity[i];
+		if(PRINTEACHSPOT)
+			for(j=0;j<numspots;j++)
+				spotreport[j]+=ldspotreport[j]*star->dintensity[i];
+		totlight+=morelight;
+	}
+
+	if(PRINTEACHSPOT)
+		for(i=0;i<numspots;i++)
+			spotreport[i]*=star->brightnessfactor*star->area/star->maxlight;
+	if(!FLATTENMODEL||numplanets==0)
+		thelightness=star->brightnessfactor*star->area*totlight/star->maxlight;	//normalized to PI*Rstar^2 * brightnessfactor
+	else
+	{
+		realnumplanets=numplanets;
+		numplanets=0;
+		thelightness=star->brightnessfactor*star->area*totlight/star->maxlight-lightness(t,star,planet,spot);  //flattened to 0 outside transits
+		numplanets=realnumplanets;
+	}
+	return thelightness;
+}
+#endif
 int inifilereaderld(char datastr[4096],int *a,int e,double lda[5])
 {
 	int i,b[4],c;
@@ -3032,6 +3105,51 @@ int initializelcdata(char filename[64],double lcstarttime,double lcfinishtime,in
 	return 0;
 	
 }
+#if PRECALCPLANET
+void initializeprecalcplanet(stardata *star,planetdata planet[MAXPLANETS],int lcn,double lctime[])
+{
+	int i,timeindex;
+	double planetsin,planetcos,torig;
+
+	for(timeindex=0;timeindex<lcn;timeindex++)
+	{
+		torig=lctime[timeindex]/86400.0+planet->lct0;
+		zerototalnums();
+
+		for(i=0;i<numplanets;i++)
+		{
+			planetsin=sin(planet[i].omegaorbit*lctime[timeindex]+planet[i].omegat0);
+			planetcos=cos(planet[i].omegaorbit*lctime[timeindex]+planet[i].omegat0);
+			if(planet[i].orbitcoeff[0]*planetcos+planet[i].orbitcoeff[1]*planetsin<0)
+			{	//planet is 'behind' the star (x is negative)
+			}
+			else
+			{
+				planet[i].y=planet[i].orbitcoeff[2]*planetcos+planet[i].orbitcoeff[3]*planetsin;
+				planet[i].z=planet[i].orbitcoeff[4]*planetcos;
+				if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
+				{
+					createcircle(planet[i],star->r,star->rsq);
+				}
+			}
+		}
+		totalnumcircle[timeindex]=totalnum.circle;
+		for(i=0;i<totalnumcircle[timeindex];i++)
+		{
+			indcircle[i][timeindex].centery=circle[i].centery; indcircle[i][timeindex].centerz=circle[i].centerz;
+			indcircle[i][timeindex].radius=circle[i].radius; indcircle[i][timeindex].area=circle[i].area; indcircle[i][timeindex].rsq=circle[i].rsq;
+			indcircle[i][timeindex].mindcen=circle[i].mindcen;indcircle[i][timeindex].maxdcen=circle[i].maxdcen;
+			indcircle[i][timeindex].numstarint=circle[i].numstarint;
+			if(indcircle[i][timeindex].numstarint>0)
+			{
+				indcircle[i][timeindex].starintdang=circle[i].starintdang;
+				indcircle[i][timeindex].starintbeta[0]=circle[i].starintbeta[0]; indcircle[i][timeindex].starintbeta[1]=circle[i].starintbeta[1];
+			}
+		}
+	}
+
+}
+#endif
 double findchisq(stardata *star,planetdata *planet,spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[])
 {
 	int i;
@@ -3042,7 +3160,11 @@ double findchisq(stardata *star,planetdata *planet,spotdata spot[MAXSPOTS],int l
 	{
 		errorflag=0;
 		debuglcni=i;
-		dif=lightness(lctime[i],star,planet,spot)-lclight[i];
+#		if PRECALCPLANET
+			dif=lightnessindexed(lctime[i],star,planet,spot,i)-lclight[i];
+#		else
+			dif=lightness(lctime[i],star,planet,spot)-lclight[i];
+#		endif
 		if(errorflag)
 		{
 			fprintf(outerr,"error %i\nat datum %i\n (location 0)\n",errorflag,i);
@@ -4211,7 +4333,10 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 }
 void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,char lcoutfilename[128])
 {
-	int i,j;
+	int i;
+#	if PRINTEACHSPOT
+		int j;
+#	endif
 	double light,torig;
 	FILE *lcout;
 
@@ -4554,6 +4679,25 @@ int main(int argc,char *argv[])
 		printf("error opening outerr file: %s\n",filename);
 	else
 		fprintf(outerr,"--- error file for stsp ---\n");
+
+#	if PRECALCPLANET
+#		if !QUIET
+			printf("initializing precalcplanet values\n");
+#		endif
+		for(i=0;i<MAXPLANETS;i++)
+		{
+			indcircle[i]=(tcircle *)malloc(lcn*sizeof(tcircle));
+			if(indcircle[i]==NULL)
+				printf("malloc error initializing indexed circle %i\n",i);
+		}
+		totalnumcircle=(int *)malloc(lcn*sizeof(int));
+		if(totalnumcircle==NULL)
+			printf("malloc error initializing totalnumcircle\n");
+		initializeprecalcplanet(star,planet,lcn,lctime);
+#		if !QUIET
+			printf("  memory used: %i\n done initializing precalcplanet\n",lcn*sizeof(tcircle)*MAXPLANETS+lcn*sizeof(int));
+#		endif
+#	endif
 
 	if(j==0||j==3||j==5||j==7||j==8||j==10)
 	{
