@@ -14,6 +14,7 @@
 #define ORDERSPOTSMETHOD 2		//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11			//how many light curve points down from the max to call the max (for normalization) 
 #define CALCBRIGHTNESSFACTOR 1	//whether to match normalization by calculating the brightness factor (don't use DOWNFROMMAX)
+#define MCMCTRACKMEM 200000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
 
 #define MAXSPOTS 10
 #define MAXPLANETS 1
@@ -3795,6 +3796,26 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 	double sqrtascale,oosqrtascale,smooascale,z,alpha,rn;
 	double bestchisq,*bestparam,torig;
 	FILE *parambest,*bestlc,*tracker,*finalparam,*in;
+#	if MCMCTRACKMEM
+		int memtrackind,*memtracki;
+		double *memtrackd;
+#	endif
+
+	nparam=3*numspots+1; //r, theta, phi of spots, then unoccluded star brightness factor
+
+#	if MCMCTRACKMEM
+		memtracki=(int *)malloc(3*MCMCTRACKMEM*sizeof(int));
+		memtrackd=(double *)malloc((nparam+1)*MCMCTRACKMEM*sizeof(double));
+		if(memtracki==NULL||memtrackd==NULL)
+		{
+			printf("malloc error for tracking buffer\n");
+			exit(0);
+		}
+		memtrackind=0;
+#	endif
+#	if !QUIET && MCMCTRACKMEM
+		printf("memory used for tracker buffer: %i\n",3*MCMCTRACKMEM*sizeof(int)+(nparam+1)*MCMCTRACKMEM*sizeof(double));
+#	endif
 
 	sprintf(filename,"%s_parambest.txt",rootname);
 	parambest=fopen(filename,"w");
@@ -3843,7 +3864,6 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 	sqrtascale=sqrt(ascale);
 	oosqrtascale=1.0/sqrtascale;
 	smooascale=sqrtascale-oosqrtascale;
-	nparam=3*numspots+1; //r, theta, phi of spots, then unoccluded star brightness factor
 	updated=(int *)malloc(npop*sizeof(int));
 	naccepted=(int *)malloc(npop*sizeof(int));
 	chisq[0]=(double *)malloc(npop*sizeof(double));
@@ -4035,7 +4055,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				k=(naccepted[r]+updated[r])%2;
 			else
 				k=naccepted[r]%2;
-			//for(j=0;j<nparam;j++)
+			//for(j=0;j<nparam;j++)  oops?
 				combineparam(param[k][r],param[curstep][i],param[potstep][i],z);					
 			goodparams=setspots(param[potstep][i],spot,star,planet);
 			if(goodparams)
@@ -4053,7 +4073,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 					k=(naccepted[r]+updated[r])%2;
 				else
 					k=naccepted[r]%2;
-				//for(j=0;j<nparam;j++)
+				//for(j=0;j<nparam;j++) oops?
 					combineparam(param[k][r],param[curstep][i],param[potstep][i],z);					
 				goodparams=setspots(param[potstep][i],spot,star,planet);
 				if(goodparams)
@@ -4076,10 +4096,31 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 			{	//accept step
 				naccepted[i]++;
 				updated[i]=1;
-				fprintf(tracker,"%i %i %i %lf",i,naccepted[i],msi+1,chisq[potstep][i]);
-				for(j=0;j<nparam;j++)
-					fprintf(tracker," %lf",param[potstep][i][j]);
-				fprintf(tracker,"\n");
+#				if !MCMCTRACKMEM
+					fprintf(tracker,"%i %i %i %lf",i,naccepted[i],msi+1,chisq[potstep][i]);
+					for(j=0;j<nparam;j++)
+						fprintf(tracker," %lf",param[potstep][i][j]);
+					fprintf(tracker,"\n");
+#				else
+					memtracki[memtrackind*3]=i;
+					memtracki[memtrackind*3+1]=naccepted[i];
+					memtracki[memtrackind*3+2]=msi+1;
+					memtrackd[memtrackind*(nparam+1)]=chisq[potstep][i];
+					for(j=0;j<nparam;j++)
+						memtrackd[memtrackind*(nparam+1)+1+j]=param[potstep][i][j];
+					memtrackind++;
+					if(memtrackind==MCMCTRACKMEM)
+					{
+						for(memtrackind=0;memtrackind<MCMCTRACKMEM;memtrackind++)
+						{
+							fprintf(tracker,"%i %i %i",memtracki[memtrackind*3],memtracki[memtrackind*3+1],memtracki[memtrackind*3+2]);
+							for(j=0;j<nparam+1;j++)
+								fprintf(tracker," %lf",memtrackd[memtrackind*(nparam+1)+j]);
+							fprintf(tracker,"\n");
+						}
+						memtrackind=0;
+					}
+#				endif
 				if(chisq[potstep][i]<bestchisq)
 				{
 					bestchisq=chisq[potstep][i];
@@ -4094,6 +4135,17 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		for(i=0;i<npop;i++)
 			updated[i]=0;
 	}
+
+#	if MCMCTRACKMEM
+		k=memtrackind;
+		for(memtrackind=0;memtrackind<k;memtrackind++)
+		{
+			fprintf(tracker,"%i %i %i",memtracki[memtrackind*3],memtracki[memtrackind*3+1],memtracki[memtrackind*3+2]);
+			for(j=0;j<nparam+1;j++)
+				fprintf(tracker," %lf",memtrackd[memtrackind*(nparam+1)+j]);
+			fprintf(tracker,"\n");
+		}
+#	endif
 
 	fprintf(finalparam,"%i\n%i\n",numspots,npop);
 	k=0;
