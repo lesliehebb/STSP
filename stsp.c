@@ -3,13 +3,13 @@
 #include <math.h>
 
 #define QUIET 0			//0 -> prints things, 1 -> only prints errors
-#define QUIETMCMC 0		//0 -> prints as ot goes, 1-> stays quiet (overridden by QUIET)
+#define QUIETMCMC 0		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
-#define WHICHPRINTVIS 2		//2 for me, 1 for you
+#define WHICHPRINTVIS 2		//2 what sort of visualization file to output (j-1,g-2)
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "test.in"
+#define DEFAULTFILENAME "sample-p.in"
 
 #define ORDERSPOTSMETHOD 2		//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11			//how many light curve points down from the max to call the max (for normalization) 
@@ -3413,7 +3413,12 @@ void combineangles(double theta0,double phi0,double theta1,double phi1,double z,
 {
 	double cth0,sth0,cth1,sth1,sth1cdf,th1pp,sth1pp,th2pp,sth2pp,cth2pp,cf2pp,sf2pp,sth2p,f2p,df;
 
-	if(FIXTHETAS)
+	if(theta0==theta1&&phi0==phi1)
+	{
+		thphi2[0]=theta0;
+		thphi2[1]=phi0;
+	}
+	else if(FIXTHETAS)
 	{
 		df=phi1-phi0;
 		if(df<-PI)
@@ -3814,7 +3819,7 @@ void plotdata(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOT
 	double *param,chisq; //param[0-1][chain number][parameter number]
 	FILE *out,*outppm,*in;
 
-	innotout=1;
+	innotout=0;
 
 	sprintf(filename,"%s_%i_plotdata.txt",rootname,varyspot);
 	if(innotout)
@@ -4102,16 +4107,22 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				for(j=0;j<numseeded*3;j++)
 					param[1][i][j]=readparam[j];
 				(void)rndvarparam(param[1][i],param[0][i],sigmaradius,sigmaangle,star);
-				(void)setspots(param[0][i],spot,star,planet);
-				chisq[0][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
+				goodparams=setspots(param[0][i],spot,star,planet);
+				if(!goodparams)
+					chisq[0][i]=(-1);
+				else
+					chisq[0][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
 				while(chisq[0][i]==(-1))
 				{
 					setrandomparam(param[1][i],star);
 					for(j=0;j<numseeded*3;j++)
 						param[1][i][j]=readparam[j];
 					(void)rndvarparam(param[1][i],param[0][i],sigmaradius,sigmaangle,star);
-					(void)setspots(param[0][i],spot,star,planet);
-					chisq[0][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
+					goodparams=setspots(param[0][i],spot,star,planet);
+					if(!goodparams)
+						chisq[0][i]=(-1);
+					else
+						chisq[0][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
 				}
 			}
 			else
@@ -4119,15 +4130,21 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				setrandomparam(param[0][i],star);
 				for(j=0;j<numseeded*3;j++)
 					param[0][i][j]=readparam[j];
-				(void)setspots(param[0][i],spot,star,planet);
-				chisq[0][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
+				goodparams=setspots(param[0][i],spot,star,planet);
+				if(!goodparams)
+					chisq[0][i]=(-1);
+				else
+					chisq[0][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
 				while(chisq[0][i]==(-1))
 				{
 					setrandomparam(param[0][i],star);
 					for(j=0;j<numseeded*3;j++)
 						param[0][i][j]=readparam[j];
-					(void)setspots(param[0][i],spot,star,planet);
-					chisq[0][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
+					goodparams=setspots(param[0][i],spot,star,planet);
+					if(!goodparams)
+						chisq[0][i]=(-1);
+					else
+						chisq[0][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
 				}
 			}
 		}
@@ -4177,8 +4194,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				k=(naccepted[r]+updated[r])%2;
 			else
 				k=naccepted[r]%2;
-			//for(j=0;j<nparam;j++)  oops?
-				combineparam(param[k][r],param[curstep][i],param[potstep][i],z);					
+			combineparam(param[k][r],param[curstep][i],param[potstep][i],z);					
 			goodparams=setspots(param[potstep][i],spot,star,planet);
 			if(goodparams)
 				chisq[potstep][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
@@ -4195,8 +4211,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 					k=(naccepted[r]+updated[r])%2;
 				else
 					k=naccepted[r]%2;
-				//for(j=0;j<nparam;j++) oops?
-					combineparam(param[k][r],param[curstep][i],param[potstep][i],z);					
+				combineparam(param[k][r],param[curstep][i],param[potstep][i],z);					
 				goodparams=setspots(param[potstep][i],spot,star,planet);
 				if(goodparams)
 					chisq[potstep][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
