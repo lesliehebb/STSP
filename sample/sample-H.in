@@ -1,0 +1,53 @@
+#PLANET PROPERTIES
+1			; Number of planets -- (if there are more than 1 planet, then the set of 8 planet properties are repeated)
+1.0			; T0, epoch         (middle of first transit) in days.
+1.5			; Planet Period      (days)
+0.0038688		; (Rp/Rs)^2         (Rplanet / Rstar )^ 2
+0.120			; Duration (days)   (physical duration of transit, not used)
+0.732			; Impact parameter  (0= planet cross over equator)
+90.0			; Inclination angle of orbit (90 deg = planet crosses over equator)
+0.0			; Lambda of orbit (0 deg = orbital axis along z-axis)
+0.0			; ecosw
+0.0			; esinw
+#STAR PROPERTIES
+1.3450000		; Mean Stellar density (Msun/Rsun^3)
+12.0			; Stellar Rotation period (days)
+5576			; Stellar Temperature
+0.0			; Stellar metallicity
+0.0			; Tilt of the rotation axis of the star down from z-axis (degrees)
+0.5742 -0.2175 0.8311 -0.4144	; Limb darkening (4 coefficients)
+100			; number of rings for limb darkening appoximation
+#SPOT PROPERTIES
+6				; number of spots
+0.70				; fractional lightness of spots (0.0=total dark, 1.0=same as star)
+#LIGHT CURVE
+model_lc.dat			; lightcurve input data file
+0.0				; start time to start fitting the light curve
+12.00000			; duration of light curve to fit (days)
+996.942768414			; real maximum of light curve data (corrected for noise), 0 -> use downfrommax	
+0				; is light curve flattened (to zero) outside of transits?
+#ACTION
+H		; H= metropolis-hastings from seed parameters
+1000		; number of steps
+0.05		; sigma r
+0.1		; sigma angle
+0.382525700680		; spot radius
+2.026108848159		; theta
+0.744618637426		; phi
+0.290572978656
+1.727405120396
+1.570800631939
+0.301035942796
+1.315591006119
+2.163399563938
+0.213239119426
+1.844123549292
+3.372735964458
+0.292627124386
+1.100571758314
+4.248530337143
+0.300349989200
+1.963252856264
+5.492592578403
+1.00
+
