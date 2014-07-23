@@ -2,14 +2,17 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define ALWAYSPRINTVIS 1
-#define WHICHPRINTVIS 2	//2 for me, 1 for you
-#define UNNORMALIZEOUTPUT 1
+#define QUIET 0			//0 -> prints things, 1 -> only prints errors
+#define QUIETMCMC 0		//0 -> prints as ot goes, 1-> stays quiet (overridden by QUIET)
+#define ALWAYSPRINTVIS 0
+#define WHICHPRINTVIS 2		//2 for me, 1 for you
+#define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
+#define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "ITOflatU2.in"
+#define DEFAULTFILENAME "test.in"
 
 #define ORDERSPOTSMETHOD 2		//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
-#define DOWNFROMMAX 11			//how many light curve points down from the max to call the max (for normalization)
+#define DOWNFROMMAX 11			//how many light curve points down from the max to call the max (for normalization) 
 #define CALCBRIGHTNESSFACTOR 1	//whether to match normalization by calculating the brightness factor (don't use DOWNFROMMAX)
 
 #define MAXSPOTS 10
@@ -1410,9 +1413,10 @@ double realstararea(double starradius)
 	int i;
 	double totarea,darea;
 
-	if(PRINTEACHSPOT)
+#	if PRINTEACHSPOT
 		for(i=0;i<numspots;i++)
 			ldspotreport[i]=0.0;
+#	endif
 	totarea=PI*starradius*starradius;
 	for(i=0;i<totalnum.circle;i++)
 	{
@@ -1435,38 +1439,50 @@ double realstararea(double starradius)
 		if(ellipse[i].active)
 		{
 			darea=ellipse[i].area*ellipse[i].fracdarkness;
-			if(PRINTEACHSPOT) ldspotreport[ellipse[i].spot]+=darea;
+#			if PRINTEACHSPOT
+				ldspotreport[ellipse[i].spot]+=darea;
+#			endif
 			totarea-=darea;
 		}
 	for(i=0;i<totalnum.cresent;i++)
 		if(cresent[i].active)
 		{
 			darea=cresent[i].area*ellipse[cresent[i].ellipsen].fracdarkness;
-			if(PRINTEACHSPOT) ldspotreport[ellipse[cresent[i].ellipsen].spot]+=darea;
+#			if PRINTEACHSPOT 
+				ldspotreport[ellipse[cresent[i].ellipsen].spot]+=darea;
+#			endif
 			totarea-=darea;
 		}
 	for(i=0;i<totalnum.ellipsepart;i++)
 	{
 		darea=ellipsepart[i].area*ellipse[ellipsepart[i].ellipsen].fracdarkness;
-		if(PRINTEACHSPOT) ldspotreport[ellipse[ellipsepart[i].ellipsen].spot]+=darea;
+#		if PRINTEACHSPOT 
+			ldspotreport[ellipse[ellipsepart[i].ellipsen].spot]+=darea;
+#		endif
 		totarea-=darea;
 	}
 	for(i=0;i<totalnum.cresentpart;i++)
 	{
 			darea=cresentpart[i].area*ellipse[cresentpart[i].ellipsen].fracdarkness;
-			if(PRINTEACHSPOT) ldspotreport[ellipse[cresentpart[i].ellipsen].spot]+=darea;
+#			if PRINTEACHSPOT
+				ldspotreport[ellipse[cresentpart[i].ellipsen].spot]+=darea;
+#			endif
 			totarea-=darea;
 	}
 	for(i=0;i<totalnum.ellipsehole;i++)
 	{
 		darea=ellipsehole[i].area*ellipse[ellipsehole[i].ellipsen].fracdarkness;
-		if(PRINTEACHSPOT) ldspotreport[ellipse[ellipsehole[i].ellipsen].spot]+=darea;
+#		if PRINTEACHSPOT
+			ldspotreport[ellipse[ellipsehole[i].ellipsen].spot]+=darea;
+#		endif
 		totarea-=darea;
 	}
 	for(i=0;i<totalnum.cresenthole;i++)
 	{
 		darea=cresenthole[i].area*ellipse[cresent[cresenthole[i].cresentn].ellipsen].fracdarkness;
-		if(PRINTEACHSPOT) ldspotreport[ellipse[cresent[cresenthole[i].cresentn].ellipsen].spot]+=darea;
+#		if PRINTEACHSPOT
+			ldspotreport[ellipse[cresent[cresenthole[i].cresentn].ellipsen].spot]+=darea;
+#		endif
 		totarea-=darea;
 	}
 	if(totarea<0||totarea>PI*starradius*starradius)
@@ -2087,9 +2103,10 @@ double ldstararea(double starradius)
 	int i;
 	double totarea,darea;
 
-	if(PRINTEACHSPOT)
+#	if PRINTEACHSPOT
 		for(i=0;i<numspots;i++)
 			ldspotreport[i]=0.0;
+#	endif
 	totarea=PI*starradius*starradius;
 
 	for(i=0;i<totalnum.circle;i++)
@@ -2104,7 +2121,9 @@ double ldstararea(double starradius)
 		if(ellipse[i].active)
 		{
 			darea=ldellipsearea(starradius,i)*ellipse[i].fracdarkness;
-			if(PRINTEACHSPOT) ldspotreport[ellipse[i].spot]+=darea;
+#			if PRINTEACHSPOT
+				ldspotreport[ellipse[i].spot]+=darea;
+#			endif
 			totarea-=darea;
 		}
 	}
@@ -2114,7 +2133,9 @@ double ldstararea(double starradius)
 		if(cresent[i].active)
 		{
 			darea=ldcresentarea(starradius,i)*ellipse[cresent[i].ellipsen].fracdarkness;
-			if(PRINTEACHSPOT) ldspotreport[ellipse[cresent[i].ellipsen].spot]+=darea;
+#			if PRINTEACHSPOT
+				ldspotreport[ellipse[cresent[i].ellipsen].spot]+=darea;
+#			endif
 			totarea-=darea;
 		}
 	}
@@ -2122,28 +2143,36 @@ double ldstararea(double starradius)
 	for(i=0;i<totalnum.ellipsehole;i++)
 	{
 		darea=(ldellipsearea(starradius,ellipsehole[i].ellipsen)-ldcirclearea(starradius,ellipsehole[i].circlen))*ellipse[ellipsehole[i].ellipsen].fracdarkness;
-		if(PRINTEACHSPOT) ldspotreport[ellipse[ellipsehole[i].ellipsen].spot]+=darea;
+#		if PRINTEACHSPOT
+			ldspotreport[ellipse[ellipsehole[i].ellipsen].spot]+=darea;
+#		endif
 		totarea-=darea;
 	}
 
 	for(i=0;i<totalnum.cresenthole;i++)
 	{
 		darea=(ldcresentarea(starradius,cresenthole[i].cresentn)-ldcirclearea(starradius,cresenthole[i].circlen))*ellipse[cresent[cresenthole[i].cresentn].ellipsen].fracdarkness;
-		if(PRINTEACHSPOT) ldspotreport[ellipse[cresent[cresenthole[i].cresentn].ellipsen].spot]+=darea;
+#		if PRINTEACHSPOT
+			ldspotreport[ellipse[cresent[cresenthole[i].cresentn].ellipsen].spot]+=darea;
+#		endif
 		totarea-=darea;
 	}
 
 	for(i=0;i<totalnum.ellipsepart;i++)
 	{
 		darea=ldellipsepartarea(starradius,i)*ellipse[ellipsepart[i].ellipsen].fracdarkness;
-		if(PRINTEACHSPOT) ldspotreport[ellipse[ellipsepart[i].ellipsen].spot]+=darea;
+#		if PRINTEACHSPOT
+			ldspotreport[ellipse[ellipsepart[i].ellipsen].spot]+=darea;
+#		endif
 		totarea-=darea;
 	}
 
 	for(i=0;i<totalnum.cresentpart;i++)
 	{
 		darea=ldcresentpartarea(starradius,i)*ellipse[cresentpart[i].ellipsen].fracdarkness;
-		if(PRINTEACHSPOT) ldspotreport[ellipse[cresentpart[i].ellipsen].spot]+=darea;
+#		if PRINTEACHSPOT
+			ldspotreport[ellipse[cresentpart[i].ellipsen].spot]+=darea;
+#		endif
 		totarea-=darea;
 	}
 
@@ -2205,14 +2234,15 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 	double totlight,morelight,planetsin,planetcos,torig,thelightness;
 
 	torig=t/86400.0+planet->lct0;
-	if(PRINTVIS)
-		if(PRINTVIS==1)
-			fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 9\n",torig,0.0,0.0,1.0,1.0);
-		else
-		{
-			fprintf(outv,"c\n0 0 %lf 9\n",star->ringr[NLDRINGS-1]); 
-		}
-
+#	if ANYPRINTVIS
+		if(PRINTVIS)
+			if(PRINTVIS==1)
+				fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 9\n",torig,0.0,0.0,1.0,1.0);
+			else
+			{
+				fprintf(outv,"c\n0 0 %lf 9\n",star->ringr[NLDRINGS-1]); 
+			}
+#	endif
 	zerototalnums();
 
 	star->phi=star->omega*t;
@@ -2223,15 +2253,17 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 		planetcos=cos(planet[i].omegaorbit*t+planet[i].omegat0);
 		if(planet[i].orbitcoeff[0]*planetcos+planet[i].orbitcoeff[1]*planetsin<0)
 		{	//planet is 'behind' the star (x is negative)
-			if(PRINTVIS)
-			{
-				planet[i].y=planet[i].orbitcoeff[2]*planetcos+planet[i].orbitcoeff[3]*planetsin;  
-				planet[i].z=planet[i].orbitcoeff[4]*planetcos;
-				if(PRINTVIS==1)
-					fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
-				else
-					fprintf(outv,"c\n%g %g %g 10\n",planet[i].y,planet[i].z,planet[i].r);
-			}
+#			if ANYPRINTVIS
+				if(PRINTVIS)
+				{
+					planet[i].y=planet[i].orbitcoeff[2]*planetcos+planet[i].orbitcoeff[3]*planetsin;  
+					planet[i].z=planet[i].orbitcoeff[4]*planetcos;
+					if(PRINTVIS==1)
+						fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
+					else
+						fprintf(outv,"c\n%g %g %g 10\n",planet[i].y,planet[i].z,planet[i].r);
+				}
+#			endif
 		}
 		else
 		{
@@ -2240,17 +2272,21 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 			if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
 			{
 				createcircle(planet[i],star->r,star->rsq);
-				if(PRINTVIS)
-					if(PRINTVIS==1)
-						fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 3\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
-					else
-						fprintf(outv,"c\n%g %g %g 3\n",planet[i].y,planet[i].z,planet[i].r);
+#				if	ANYPRINTVIS
+					if(PRINTVIS)
+						if(PRINTVIS==1)
+							fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 3\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
+						else
+							fprintf(outv,"c\n%g %g %g 3\n",planet[i].y,planet[i].z,planet[i].r);
+#				endif
 			}
-			else if(PRINTVIS)
-				if(PRINTVIS==1)
-					fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
-				else
-					fprintf(outv,"c\n%g %g %g 10\n",planet[i].y,planet[i].z,planet[i].r);
+#			if ANYPRINTVIS
+				else if(PRINTVIS)
+					if(PRINTVIS==1)
+						fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
+					else
+						fprintf(outv,"c\n%g %g %g 10\n",planet[i].y,planet[i].z,planet[i].r);
+#			endif
 		}
 	}
 
@@ -2258,26 +2294,26 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 	for(i=0;i<numspots;i++)
 		if(spot[i].psi-spot[i].alpha<PIo2)	//spot visable
 			createellipsecresent(i,spot[i],star->r);
-
-	if(PRINTVIS)
-		if(PRINTVIS==1)
-		{
-			for(i=0;i<numspots;i++)
+#	if ANYPRINTVIS
+		if(PRINTVIS)
+			if(PRINTVIS==1)
 			{
-				if(spot[i].psi>PIo2+spot[i].alpha)
-					fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,spot[i].y,spot[i].z,spot[i].r,spot[i].r*spot[i].cospsi);
-				else
-					fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 1\n",torig,spot[i].y,spot[i].z,spot[i].r,spot[i].r*spot[i].cospsi);
+				for(i=0;i<numspots;i++)
+				{
+					if(spot[i].psi>PIo2+spot[i].alpha)
+						fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,spot[i].y,spot[i].z,spot[i].r,spot[i].r*spot[i].cospsi);
+					else
+						fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 1\n",torig,spot[i].y,spot[i].z,spot[i].r,spot[i].r*spot[i].cospsi);
 
+				}
 			}
-		}
-		else
-			for(i=0;i<numspots;i++)
-				if(spot[i].psi-spot[i].alpha>PIo2)
-					fprintf(outv,"e\n%g %g %g %g %i\n",spot[i].y,spot[i].z,spot[i].r,spot[i].r*spot[i].cospsi,pvisc);
-				else
-					fprintf(outv,"e\n%g %g %g %g %i\n",spot[i].y,spot[i].z,spot[i].r,spot[i].r*spot[i].cospsi,pvasc);
-					
+			else
+				for(i=0;i<numspots;i++)
+					if(spot[i].psi-spot[i].alpha>PIo2)
+						fprintf(outv,"e\n%g %g %g %g %i\n",spot[i].y,spot[i].z,spot[i].r,spot[i].r*spot[i].cospsi,pvisc);
+					else
+						fprintf(outv,"e\n%g %g %g %g %i\n",spot[i].y,spot[i].z,spot[i].r,spot[i].r*spot[i].cospsi,pvasc);
+#	endif					
 	checkoverlap(star->r);	//create disjoint shapes that block light
 
 	totlight=realstararea(star->r)*star->dintensity[NLDRINGS-1];
@@ -2366,7 +2402,9 @@ int inifilereaderld(char datastr[4096],int *a,int e,double lda[5])
 	sscanf(datastr+b[1]+1,"%lf",&lda[3]);
 	sscanf(datastr+b[2]+1,"%lf",&lda[4]);
 
-	printf("limb darkening: %lf %lf %lf %lf\n",lda[1],lda[2],lda[3],lda[4]);
+#	if !QUIET
+		printf("limb darkening: %lf %lf %lf %lf\n",lda[1],lda[2],lda[3],lda[4]);
+#	endif
 
 	*a=c;
 	return 0;
@@ -2469,7 +2507,9 @@ int filereadd(int n,double *x,char *datastr,int *current,int end)
 			{
 				sscanf(datastr+a,"%lf",&y);
 				x[i]=y;
-				printf("(%lf)\n",x[i]);
+#				if !QUIET
+					printf("(%lf)\n",x[i]);
+#				endif
 				return 0;
 			}
 			else
@@ -2483,13 +2523,17 @@ int filereadd(int n,double *x,char *datastr,int *current,int end)
 			b++;
 			while(datastr[b]==32&&b<end)
 				b++;
-			printf("(%lf) \"%s\"\n",x[i],datastr+b);
+#			if !QUIET
+				printf("(%lf) \"%s\"\n",x[i],datastr+b);
+#			endif
 		}
 		else
 		{
 			sscanf(datastr+a,"%lf",&y);
 			x[i]=y;
-			printf("(%lf)\n",x[i]);
+#			if !QUIET
+				printf("(%lf)\n",x[i]);
+#			endif
 		}
 
 		while(datastr[b]!=0)
@@ -2526,7 +2570,9 @@ int filereads(char *rstr,char *datastr,int *current,int end)
 
 	a=*current;
 	sscanf(datastr+a,"%s",rstr);
-	printf("\'%s\'\n",rstr);
+#	if !QUIET
+		printf("\'%s\'\n",rstr);
+#	endif
 	a++;
 	while(datastr[a]!=0)
 	{
@@ -2560,7 +2606,9 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	if(filereadd(1,x,datastr,&a,e)<0)
 		return -4;
 	numplanets=(int)x[0];
-	printf("number of planets (%i)\n",numplanets);
+#	if !QUIET
+		printf("number of planets (%i)\n",numplanets);
+#	endif
 	if(numplanets>MAXPLANETS)
 	{
 		printf("too many planets\n");
@@ -2584,7 +2632,9 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			planet[i].thetaorbit*=(-1.0);
 		if(planet[i].phiorbit<0)
 			planet[i].phiorbit+=PIt2;
-		printf("planet %i\n orbit theta= %0.9lf (%lf degrees)\n orbit phi= %0.9lf (%lf degrees)\n",i,planet[i].thetaorbit,planet[i].thetaorbit*180.0/PI,planet[i].phiorbit,planet[i].phiorbit*180/PI);
+#		if !QUIET
+			printf("planet %i\n orbit theta= %0.9lf (%lf degrees)\n orbit phi= %0.9lf (%lf degrees)\n",i,planet[i].thetaorbit,planet[i].thetaorbit*180.0/PI,planet[i].phiorbit,planet[i].phiorbit*180/PI);
+#		endif
 /*		planet[i].thetaorbit=90.0-x[5];
 		if(planet[i].thetaorbit<0)
 			planet[i].thetaorbit*=(-1);
@@ -2623,7 +2673,9 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	if(filereadd(2,x,datastr,&a,e)<0)
 		return -11;
 	numspots=(int)x[0];
-	printf("number of spots (%i)\n",numspots);
+#	if !QUIET
+		printf("number of spots (%i)\n",numspots);
+#	endif
 	if(numspots>MAXSPOTS)
 	{
 		printf("too many spots\n");
@@ -2638,7 +2690,9 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 
 	if(filereads(filename,datastr,&a,e)<0)
 		return -14;
-	printf("filename for lightcurve data (%s)\n",filename);
+#	if !QUIET
+		printf("filename for lightcurve data (%s)\n",filename);
+#	endif
 	if(filereadd(4,x,datastr,&a,e)<0)
 		return -15;
 	*lcstarttime=x[0];
@@ -2647,16 +2701,19 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	if((*lcmaxlight)==0)
 	{
 		USEDOWNFROMMAX=1;
-		printf("using down from max (%i)\n",DOWNFROMMAX);
+#		if !QUIET
+			printf("using down from max (%i)\n",DOWNFROMMAX);
+#		endif
 	}
 	else
 		USEDOWNFROMMAX=0;
 	FLATTENMODEL=(int)x[3];
-	if(FLATTENMODEL)
-		printf("flattening model light curve\n");
-	else
-		printf("not flattening model light curve\n");
-
+#	if !QUIET
+		if(FLATTENMODEL)
+			printf("flattening model light curve\n");
+		else
+			printf("not flattening model light curve\n");
+#	endif
 	star->r=1.0;
 	for(i=0;i<NLDRINGS;i++)
 		star->ringr[i]=(i+1)*star->r/NLDRINGS; //outer radius of ith ring
@@ -2677,7 +2734,9 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		planet[i].r=sqrt(planet[i].rsq);
 		planet[i].area=PI*planet[i].rsq;
 		planet[i].rorbit=pow(ppdays/365.24218967,2.0/3.0)*pow(stardensity,1.0/3.0)*214.939469384;
-		printf("planet %i Rorbit= %lf\n",i,planet[i].rorbit);
+#		if !QUIET
+			printf("planet %i Rorbit= %lf\n",i,planet[i].rorbit);
+#		endif
 		planet[i].omegat0=atan(-sin(planet[i].phiorbit)*cos(planet[i].thetaorbit)/cos(planet[i].phiorbit));
 		if(planet[i].omegat0<0) planet[i].omegat0+=PIt2;
 		planet[i].orbitcoeff[0]=planet[i].rorbit*cos(planet[i].phiorbit)*cos(planet[i].thetaorbit);
@@ -3586,34 +3645,35 @@ void metrohast(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPO
 	for(j=0;j<numspots;j++)
 		fprintf(bestparam,"%lf    radius\n%lf    theta\n%lf    phi\n",spot[j].r,spot[j].thetarel*180.0/PI,spot[j].phirel*180/PI);
 
-	if(ALWAYSPRINTVIS)
-	{
+#	if ANYPRINTVIS&&ALWAYSPRINTVIS
 		PRINTVIS=WHICHPRINTVIS;
 		sprintf(filename,"%s_vis.txt",rootname);
 		outv=fopen(filename,"w");
-	}
+#	endif
+
 	for(i=0;i<lcn;i++)
 	{
 		torig=lctime[i]/86400.0+planet[0].lct0;
 		r=lightness(lctime[i],star,planet,spot);
-		if(UNNORMALIZEOUTPUT)
-		{
+#		if UNNORMALIZEOUTPUT
 			fprintf(bestlc,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i]/lclightnorm,lcuncertainty[i]/lclightnorm,r/lclightnorm);
-			if(PRINTEACHSPOT)
+#			if PRINTEACHSPOT
 				for(j=0;j<numspots;j++)
 					fprintf(bestlc," %0.6lf",spotreport[j]/lclightnorm);
+#			endif
 			fprintf(bestlc,"\n");
-		}
-		else
-		{
+#		else
 			fprintf(bestlc,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i],lcuncertainty[i],r);
-			if(PRINTEACHSPOT)
+#			if PRINTEACHSPOT
 				for(j=0;j<numspots;j++)
 					fprintf(bestlc," %0.6lf",spotreport[j]);
+#			endif
 			fprintf(bestlc,"\n");
-		}
-		if(PRINTVIS&&PRINTVIS!=1)
-			fprintf(outv,"z\n%lf %lf\n",lclight[i],r);
+#		endif
+#		if ANYPRINTVIS
+			if(PRINTVIS&&PRINTVIS!=1)
+				fprintf(outv,"z\n%lf %lf\n",lclight[i],r);
+#		endif
 	}
 
 	fclose(bestparam);
@@ -3766,12 +3826,16 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		fscanf(in,"%i\n%i\n",&i,&j);
 		if(i!=numspots)
 		{
-			printf("using numspots= %i from file\n",i);
+#			if !QUIET
+				printf("using numspots= %i from file\n",i);
+#			endif
 			numspots=i;
 		}
 		if(j!=npop)
 		{
-			printf("using npop= %i from file\n",j);
+#			if !QUIET
+				printf("using npop= %i from file\n",j);
+#			endif
 			npop=j;
 		}
 	}
@@ -3799,11 +3863,15 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 			memused+=nparam*sizeof(double);
 		}
 	}
-	printf("memory used for mcmc: %i\n",memused);
+#	if !QUIET
+		printf("memory used for mcmc: %i\n",memused);
+#	endif
 	bestparam=(double *)malloc(nparam*sizeof(double));
 
-	if(FIXTHETAS)
-		printf("using fixed values for spot thetas\n");
+#	if !QUIET
+		if(FIXTHETAS)
+			printf("using fixed values for spot thetas\n");
+#	endif
 	if(!seeded)	//not seeded
 	{
 		if(FIXTHETAS)
@@ -3939,14 +4007,20 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		j=0;
 		for(i=0;i<npop;i++)
 			j+=naccepted[i];
-		printf("%i  (%i)\n",msi,j);
+#		if !QUIETMCMC && !QUIET
+			printf("%i  (%i)\n",msi,j);
+#		endif
 		if((msi<=100&&msi>=25&&msi%5==0)||(msi%1005==0&&msi>0))
 		{
-			printf("reordering spots   ");
+#			if !QUIETMCMC && !QUIET
+				printf("reordering spots   ");
+#			endif
 			i=0;
 			for(j=0;j<npop;j++)
 				i+=orderspots(param[naccepted[j]%2][j]);
-			printf("%i\n",i);
+#			if !QUIETMCMC && !QUIET
+				printf("%i\n",i);
+#			endif
 		}
 		for(i=0;i<npop;i++)
 		{
@@ -4011,7 +4085,9 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 					bestchisq=chisq[potstep][i];
 					for(j=0;j<nparam;j++)
 						bestparam[j]=param[potstep][i][j];
-					printf("%i %i %lf\n",i,naccepted[i],bestchisq);
+#					if !QUIETMCMC && !QUIET
+						printf("%i %i %lf\n",i,naccepted[i],bestchisq);
+#					endif
 				}	
 			}
 		}
@@ -4035,34 +4111,36 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 	for(j=0;j<numspots;j++)
 		fprintf(parambest,"%lf    radius\n%lf    theta\n%lf    phi\n",spot[j].r,spot[j].thetarel*180.0/PI,spot[j].phirel*180/PI);
 	fprintf(parambest,"%lf     unoccluded brightness\n",star->brightnessfactor*star->area/lclightnorm);
-	if(ALWAYSPRINTVIS)
-	{
+
+#	if ANYPRINTVIS&&ALWAYSPRINTVIS
 		PRINTVIS=WHICHPRINTVIS;
 		sprintf(filename,"%s_vis.txt",rootname);
 		outv=fopen(filename,"w");
-	}
+#	endif
+
 	for(i=0;i<lcn;i++)
 	{
 		torig=lctime[i]/86400.0+planet[0].lct0;
 		z=lightness(lctime[i],star,planet,spot);
-		if(UNNORMALIZEOUTPUT)
-		{
+#		if UNNORMALIZEOUTPUT
 			fprintf(bestlc,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i]/lclightnorm,lcuncertainty[i]/lclightnorm,z/lclightnorm);
-			if(PRINTEACHSPOT)
+#			if PRINTEACHSPOT
 				for(j=0;j<numspots;j++)
 					fprintf(bestlc," %0.6lf",spotreport[j]/lclightnorm);
+#			endif
 			fprintf(bestlc,"\n");
-		}
-		else
-		{
+#		else
 			fprintf(bestlc,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i],lcuncertainty[i],z);
-			if(PRINTEACHSPOT)
+#			if(PRINTEACHSPOT)
 				for(j=0;j<numspots;j++)
 					fprintf(bestlc," %0.6lf",spotreport[j]);
+#			endif
 			fprintf(bestlc,"\n");
-		}
-		if(PRINTVIS&&PRINTVIS!=1)
-			fprintf(outv,"z\n%lf %lf\n",lclight[i],z);
+#		endif
+#		if ANYPRINTVIS
+			if(PRINTVIS&&PRINTVIS!=1)
+				fprintf(outv,"z\n%lf %lf\n",lclight[i],z);
+#		endif
 	}
 	fclose(parambest);
 	fclose(bestlc);
@@ -4092,34 +4170,35 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 		errorflag=0;
 		torig=lctime[i]/86400.0+planet[0].lct0;
 		light=lightness(lctime[i],star,planet,spot);
-		if(UNNORMALIZEOUTPUT)
-		{
+#		if UNNORMALIZEOUTPUT
 			fprintf(lcout,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i]/lclightnorm,lcuncertainty[i]/lclightnorm,light/lclightnorm);
-			if(PRINTEACHSPOT)
+#			if PRINTEACHSPOT
 				for(j=0;j<numspots;j++)
 					fprintf(lcout," %0.6lf",spotreport[j]/lclightnorm);
+#			endif
 			fprintf(lcout,"\n");
 //			fprintf(lcout,"%0.9lf %0.6lf %0.6lf\n",torig,light/lclightnorm,lcuncertainty[i]/lclightnorm);	//for making test lightcurves
-		}
-		else
-		{
+#		else
 			fprintf(lcout,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i],lcuncertainty[i],light);
-			if(PRINTEACHSPOT)
+#			if PRINTEACHSPOT
 				for(j=0;j<numspots;j++)
 					fprintf(lcout," %0.6lf",spotreport[j]);
+#			endif
 			fprintf(lcout,"\n");
-		}
+#		endif
 		if(errorflag)
 		{
 			fprintf(outerr,"error %i at datum %i (location 1)\n",errorflag,i);
 			printf("lcgen: error\n");
 			exit(0);
 		}
-		if(PRINTVIS)
-		{
-			if(PRINTVIS!=1)
-				fprintf(outv,"z\n%lf %lf\n",lclight[i],light);
-		}
+#		if ANYPRINTVIS
+			if(PRINTVIS)
+			{
+				if(PRINTVIS!=1)
+					fprintf(outv,"z\n%lf %lf\n",lclight[i],light);
+			}
+#		endif
 	}
 	fclose(lcout);
 }
@@ -4131,7 +4210,9 @@ void debuglc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS
 	
 	PRINTVIS=WHICHPRINTVIS;
 	pvasc=1; pvisc=10;
-	outv=fopen("vis.txt","w");
+#	if ANYPRINTVIS
+		outv=fopen("vis.txt","w");
+#	endif
 
 	param=(double *)malloc(3*numspots*sizeof(double));
 		if(param==NULL)
@@ -4158,11 +4239,13 @@ void debuglc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS
 				fprintf(outerr,"error %i at datum %i (location 2)\n",errorflag,i);
 				printf("debuglc: error\n");
 			}
-			if(PRINTVIS)
-			{
-				fprintf(outv,"z\n%lf %lf\n",lclight[i],light);
-				fflush(outv);
-			}
+#			if ANYPRINTVIS
+				if(PRINTVIS)
+				{
+					fprintf(outv,"z\n%lf %lf\n",lclight[i],light);
+					fflush(outv);
+				}
+#			endif
 		}
 		fclose(lcout);
 	}
@@ -4237,7 +4320,9 @@ void gentimetest(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXS
 	dfoPI=decayfrat/PI;
 	PRINTVIS=WHICHPRINTVIS;
 	pvasc=2; pvisc=4;
-	outv=fopen("stimetest_vis.txt","a");
+#	if ANYPRINTVIS
+		outv=fopen("stimetest_vis.txt","a");
+#	endif
 
 	setrandomparam(param,star);
 	for(i=0;i<5;i++)
@@ -4301,11 +4386,13 @@ void gentimetest(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXS
 			light=lightness(lctime[i],star,planet,spot);
 			pvasc=2; pvisc=4;
 		}
-		if(PRINTVIS)
-		{
-			if(PRINTVIS!=1)
-				fprintf(outv,"z\n%lf %lf\n",lclight[i],light);
-		}
+#		if ANYPRINTVIS
+			if(PRINTVIS)
+			{
+				if(PRINTVIS!=1)
+					fprintf(outv,"z\n%lf %lf\n",lclight[i],light);
+			}
+#		endif
 	}
 	if(!tocheck)
 		fclose(lcout);
@@ -4348,25 +4435,30 @@ int main(int argc,char *argv[])
 		printf("malloc error\n");
 		return 0;
 	}
-	printf("initializing with parameters from %s\n",filename);
+#	if !QUIET
+		printf("initializing with parameters from %s\n",filename);
+#	endif
 	j=initializestarplanet(star,planet,filename,&lcstarttime,&lcfinishtime,&lcmaxlight,&ascale,&mcmcnpop,&mcmcmaxsteps,&partitionpop,&partitionsteps,readparam,&randomseed,seedfilename);
 	srand(randomseed);
-	if(PRINTEACHSPOT)
-	{
+#	if PRINTEACHSPOT
 		spotreport=(double *)malloc(numspots*sizeof(double));
 		ldspotreport=(double *)malloc(numspots*sizeof(double));
 		if(spotreport==NULL||ldspotreport==NULL)
 			j=(-28);
-	}
+#	endif
 	if(j<0)
 	{
 		printf("initializestarplanet error %i\n",j);
 		return 0;
 	}
 
-	printf("\npreinitializing lc data from %s (t: %lf - %lf)\n",filename,lcstarttime,lcfinishtime);
+#	if !QUIET
+		printf("\npreinitializing lc data from %s (t: %lf - %lf)\n",filename,lcstarttime,lcfinishtime);
+#	endif
 	preinitializelcdata(filename,lcstarttime,lcfinishtime,lcmaxlight,&lcn,&lclightnorm);
-	printf("lcn= %i\nlclightnorm= %lf\n",lcn,lclightnorm);
+#	if !QUIET
+		printf("lcn= %i\nlclightnorm= %lf\n",lcn,lclightnorm);
+#	endif
 	lctime=(double *)malloc(lcn*sizeof(double));
 	lclight=(double *)malloc(lcn*sizeof(double));
 	lcuncertainty=(double *)malloc(lcn*sizeof(double));
@@ -4375,64 +4467,82 @@ int main(int argc,char *argv[])
 		printf("malloc error\n");
 		return 0;
 	}
-	printf("initializing lc data\n");
+#	if !QUIET
+		printf("initializing lc data\n");
+#	endif
 	i=initializelcdata(filename,lcstarttime,lcfinishtime,lcn,lclightnorm,lctime,lclight,lcuncertainty,planet);
 	memused[0]=MAXSPOTS*(sizeof(tellipse)+sizeof(tcresent)+sizeof(tellipsehole)+sizeof(tcresenthole))+MAXPLANETS*sizeof(tcircle);
 	memused[0]+=TWICEMAXSPOTSMAXPLANETS*(sizeof(tellipsesection)+sizeof(tcirclesection)+sizeof(tcresentsection)+sizeof(tellipsepart)+sizeof(tcresentpart)+sizeof(tpcirclearc)+sizeof(tlinesegment));
 	memused[0]+=FOURMAXSPOTSMAXPLANETS*(sizeof(tellipsearc)+sizeof(tscirclearc));
 	memused[1]=MAXSPOTS*3*sizeof(double)+3*lcn*sizeof(double);
-	printf("memory used for initialization: (%i+%i) = %i\n",memused[0],memused[1],memused[0]+memused[1]);
+#	if !QUIET
+		printf("memory used for initialization: (%i+%i) = %i\n",memused[0],memused[1],memused[0]+memused[1]);
+#	endif
 	if(i<0)
 	{
 		printf("initialization error %i\n\n",i);
 		return 0;
 	}
-	else
-		printf("initialization complete\n\n");
+#	if !QUIET
+		else
+			printf("initialization complete\n\n");
+#	endif
 
-	for(i=0;i<2;i++)
-		printf("%i: %lf %lf %lf\n",i,lctime[i],lclight[i],lcuncertainty[i]);
-	printf("...\n");
-	for(i=lcn-2;i<lcn;i++)
-		printf("%i: %lf %lf %lf\n",i,lctime[i],lclight[i],lcuncertainty[i]);
+#	if !QUIET
+		for(i=0;i<2;i++)
+			printf("%i: %lf %lf %lf\n",i,lctime[i],lclight[i],lcuncertainty[i]);
+		printf("...\n");
+		for(i=lcn-2;i<lcn;i++)
+			printf("%i: %lf %lf %lf\n",i,lctime[i],lclight[i],lcuncertainty[i]);
+#	endif
 
 	sprintf(filename,"%s_errstsp.txt",rootname);
 	outerr=fopen(filename,"w");
 	if(outerr==NULL)
 		printf("error opening outerr file: %s\n",filename);
 	else
-		fprintf(outerr,"error file for stsp\n");
+		fprintf(outerr,"--- error file for stsp ---\n");
 
 	if(j==0||j==3||j==5||j==7||j==8||j==10)
 	{
 		PRINTVIS=0;
 		if(j==0||j==8)
 		{
-			printf("starting mcmc\n");
+#			if !QUIET
+				printf("starting mcmc\n");
+#			endif
 			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxsteps,rootname,0,readparam,seedfilename);
 		}
 		else if(j==3||j==7)
 		{
-			printf("starting seeded mcmc\n");
+#			if !QUIET
+				printf("starting seeded mcmc\n");
+#			endif
 			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxsteps,rootname,1,readparam,seedfilename);
 		}
 		else if(j==5)
 		{
-			printf("starting totally seeded mcmc\n");
+#			if !QUIET
+				printf("starting totally seeded mcmc\n");
+#			endif
 			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxsteps,rootname,2,readparam,seedfilename);
 		}
 		else if(j==10)
 		{
-			printf("starting partially seeded mcmc\n");
+#			if !QUIET
+				printf("starting partially seeded mcmc\n");
+#			endif
 			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxsteps,rootname,3,readparam,seedfilename);
 		}
 	}
 	else if(j==1||j==6)
 	{
+#		if ANYPRINTVIS
 		PRINTVIS=WHICHPRINTVIS;
-		pvasc=1; pvisc=10;
 		sprintf(filename,"%s_vis.txt",rootname);
 		outv=fopen(filename,"w");
+#		endif
+		pvasc=1; pvisc=10;
 		sprintf(seedfilename,"%s_lcout.txt",rootname);
 		setspots(readparam,spot,star,planet);
 		printf("generating light curve\n");
@@ -4469,11 +4579,11 @@ int main(int argc,char *argv[])
 	free((void *)lctime);
 	free((void *)lclight);
 	free((void *)lcuncertainty);
-	if(PRINTEACHSPOT)
+#	if PRINTEACHSPOT
 	{
 		free((void *)spotreport);
 		free((void *)ldspotreport);
-	}
+#	endif
 
 	return 0;
 }
