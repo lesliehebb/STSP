@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <math.h>
 
-#define QUIET 0			//0 -> prints things, 1 -> only prints errors
-#define QUIETMCMC 0		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
+#define QUIET 1			//0 -> prints things, 1 -> only prints errors
+#define QUIETMCMC 1		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
-#define WHICHPRINTVIS 2		//2 what sort of visualization file to output (j-1,g-2)
+#define WHICHPRINTVIS 2		//2 what sort of visualization file to output (jrad-1,g-2)
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
@@ -13,8 +13,8 @@
 
 #define ORDERSPOTSMETHOD 2		//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11			//how many light curve points down from the max to call the max (for normalization) 
-#define CALCBRIGHTNESSFACTOR 1	//whether to match normalization by calculating the brightness factor (don't use DOWNFROMMAX)
-#define MCMCTRACKMEM 200000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
+#define CALCBRIGHTNESSFACTOR 1		//whether to match normalization by calculating the brightness factor (don't use DOWNFROMMAX)
+#define MCMCTRACKMEM 1000000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
 #define PRECALCPLANET 1			//1 -> optimize by precalculating planet effect at each time
 
 #define MAXSPOTS 10
