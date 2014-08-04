@@ -32,7 +32,7 @@ u		; u= partially seeded mcmc, seeded spots remain fixed
 1.25000		; ascale
 40		; number of chains
 10		; mcmc steps
-0		; 1= combine one spot at a time, 0= combine all spots.
+1		; 0= use downfrommax normalization, 1= calculate brightness factor for every model
 2		; number of spots seeded
 0		; fix only the phi's of the seeds (0-> fix all, 1-> vary radius and theta)
 0.293544337710		;spot radius

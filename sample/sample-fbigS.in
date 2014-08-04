@@ -32,7 +32,7 @@ fS		; fS= seeded mcmc from parameter file with fixed thetas
 1.25000		; ascale
 40		; number of chains
 5000		; mcmc steps
-0		; 1= combine one spot at a time, 0= combine all spots.
+1		; 0= use downfrommax normalization, 1= calculate brightness factor for every model
 0.01		; sigma for radius variation
 0.1		; sigma for angle variation
 sample_parambest.txt	; filename for parameters

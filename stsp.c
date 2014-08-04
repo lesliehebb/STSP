@@ -5,17 +5,17 @@
 #define QUIET 1			//0 -> prints things, 1 -> only prints errors
 #define QUIETMCMC 1		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
-#define WHICHPRINTVIS 2		//2 what sort of visualization file to output (jrad-1,g-2)
+#define WHICHPRINTVIS 2		//2 what sort of visualization file to output (j-1,g-2)
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "sample-p.in"
+#define DEFAULTFILENAME "sample-m.in"
 
 #define ORDERSPOTSMETHOD 2		//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11			//how many light curve points down from the max to call the max (for normalization) 
-#define CALCBRIGHTNESSFACTOR 1		//whether to match normalization by calculating the brightness factor (don't use DOWNFROMMAX)
-#define MCMCTRACKMEM 1000000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
+#define MCMCTRACKMEM 1000000	//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
 #define PRECALCPLANET 1			//1 -> optimize by precalculating planet effect at each time
+#define COMBINEONESPOT	0		//whether to combine one spot at a time or a whole chain (should be 0)
 
 #define MAXSPOTS 10
 #define MAXPLANETS 1
@@ -34,13 +34,13 @@
 #define TOOSMALL (-1000000000)
 #define ACCEPTABLEERROR (0.000001)
 
-int NLDRINGS;			//number of rings (for limb darkening)
-char COMBINEONESPOT;	//whether to combine one spot at a time or a whole chain
-char PRINTVIS;			//whether to print a vis file
-char FIXTHETAS;			//whether to fix the latitudes of the spots
-char USEDOWNFROMMAX;	//whether to use the DOWNFROMMAX for normalization (max brightness not given)
-char FLATTENMODEL;		//whether to flatten the model outside of transits
-char FIXSEEDEDONLYPHI;  //for partially seeded, fix only the phi's of seeds (not all parameters)
+int NLDRINGS;				//number of rings for limb darkening
+char PRINTVIS;				//whether to print a vis file
+char FIXTHETAS;				//whether to fix the latitudes of the spots
+char USEDOWNFROMMAX;		//whether to use the DOWNFROMMAX for normalization (max brightness not given)
+char CALCBRIGHTNESSFACTOR;	//whether to match normalization by calculating the brightness factor for each model
+char FLATTENMODEL;			//whether to flatten the model outside of transits
+char FIXSEEDEDONLYPHI;		//for partially seeded, fix only the phi's of seeds (not all parameters)
 int  numseeded;
 int numspots,numplanets;
 double spotfracdark;
@@ -281,7 +281,6 @@ double sebeta(int sen,int en)
 	if(beta<0)	beta+=PIt2;
 	return beta;
 }
-
 char wonleft(int ln,double w0)
 {
 	if((linesegment[ln].end[1].v-linesegment[ln].end[0].v)*(w0-linesegment[ln].end[0].w)+linesegment[ln].end[0].v*(linesegment[ln].end[1].w-linesegment[ln].end[0].w)>0)
@@ -2874,7 +2873,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		*ascale=x[1];
 		*mcmcnpop=(int)x[2];
 		*mcmcmaxsteps=(int)x[3];
-		COMBINEONESPOT=(char)x[4];
+		CALCBRIGHTNESSFACTOR=(char)x[4];
 		if(i==3||i==7)
 		{
 			if(filereadd(2,x,datastr,&a,e)<0)
@@ -3456,6 +3455,7 @@ void combineangles(double theta0,double phi0,double theta1,double phi1,double z,
 	else if(thphi2[1]>PIt2) thphi2[1]-=PIt2;
 	
 }
+#if COMBINEONESPOT
 void combineonespot(double p0[],double p1[],double p2[],double z)
 {
 	int i,j;
@@ -3491,13 +3491,13 @@ void combineonespot(double p0[],double p1[],double p2[],double z)
 	while(p2[i*3+2]>PIt2)
 		p2[i*3+2]-=PIt2;
 }
+#endif
 void combineparam(double p0[],double p1[],double p2[],double z)
 {
 	int i;
 	double thphi[2];
 
-	if(COMBINEONESPOT)
-	{
+#	if COMBINEONESPOT
 		if(CALCBRIGHTNESSFACTOR||rand()%(numspots+1)>0)
 			combineonespot(p0,p1,p2,z);
 		else
@@ -3506,9 +3506,7 @@ void combineparam(double p0[],double p1[],double p2[],double z)
 				p2[i]=p1[i];
 			p2[numspots*3]=z*p0[numspots*3]+(1.0-z)*p1[numspots*3];
 		}
-	}
-	else
-	{
+#	else
 		for(i=0;i<numspots;i++)
 		{
 			p2[i*3]=z*p0[i*3]+(1.0-z)*p1[i*3];
@@ -3532,7 +3530,7 @@ void combineparam(double p0[],double p1[],double p2[],double z)
 		}
 		if(!CALCBRIGHTNESSFACTOR)
 			p2[numspots*3]=z*p0[numspots*3]+(1.0-z)*p1[numspots*3];
-	}
+#	endif
 }
 int orderspots(double param[])
 {
@@ -4605,7 +4603,7 @@ int main(int argc,char *argv[])
 	planetdata planet[MAXPLANETS];
 	spotdata spot[MAXSPOTS];
 
-	COMBINEONESPOT=1;	//unless changed in initializestarplanet
+	CALCBRIGHTNESSFACTOR=1;	//unless changed in initializestarplanet
 	FIXTHETAS=0;
 	FIXSEEDEDONLYPHI=0;
 	

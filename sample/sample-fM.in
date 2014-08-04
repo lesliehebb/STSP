@@ -32,7 +32,7 @@ fM		; fM= unseeded mcmc with fixed thetas
 1.25000		; ascale
 40		; number of chains
 10		; mcmc steps
-0		; 1= combine one spot at a time, 0= combine all spots.
+1		; 0= use downfrommax normalization, 1= calculate brightness factor for every model
 0.1	;theta values
 0.6
 1.1

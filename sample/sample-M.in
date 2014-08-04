@@ -32,4 +32,4 @@ M		; M= unseeded mcmc
 1.25000		; ascale
 40		; number of chains
 5000		; mcmc steps
-0		; 1= combine one spot at a time, 0= combine all spots.
+1		; 0= use downfrommax normalization, 1= calculate brightness factor for every model
