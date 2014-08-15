@@ -45,6 +45,7 @@ char FLATTENMODEL;			//whether to flatten the model outside of transits
 char FIXSEEDEDONLYPHI;		//for partially seeded, fix only the phi's of seeds (not all parameters)
 int  numseeded;
 int numspots,numplanets;
+long int starttime;
 double spotfracdark;
 double sigmaradius,sigmaangle;
 FILE *outv,*outerr;
@@ -4175,9 +4176,9 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 	else
 	{
 		maxsteps=TOOBIG;
-		maxtime=timecheck()-maxstepsortime;  //time limit is passed as negative
+		maxtime=starttime-maxstepsortime;  //time limit is passed as negative
 #		if !QUIETMCMC && !QUEIT
-			printf("start time: ~%i maxtime: %i   (%i)\n",timecheck(),maxtime,maxstepsortime);
+			printf("start time: %i maxtime: %i   (%i)\n",starttime,maxtime,maxstepsortime);
 #		endif
 	}
 	avgtime=0;
@@ -4302,10 +4303,10 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		{
 			time1=timecheck();
 			avgtime=(avgtime*msi+time1-time0)/(msi+1);
-			if(maxtime&&time1+2*avgtime>maxtime)
+			if(maxtime&&time1+2*avgtime+300>maxtime)
 				maxsteps=0;			//make it stop, time is almost up
 		}
-	}
+	}			//end of main mcmc loop
 
 #	if MCMCTRACKMEM
 		k=memtrackind;
@@ -4365,7 +4366,8 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				fprintf(outv,"z\n%lf %lf\n",lclight[i],z);
 #		endif
 	}
-	fprintf(outerr,"average step time: %i\n",avgtime);
+	if(maxtime||ALWAYSAVERAGETIME)
+		fprintf(outerr,"average step time: %i\n",avgtime);
 	fclose(parambest);
 	fclose(bestlc);
 	fclose(tracker);
@@ -4640,6 +4642,8 @@ int main(int argc,char *argv[])
 	stardata *star,thestar;
 	planetdata planet[MAXPLANETS];
 	spotdata spot[MAXSPOTS];
+
+	starttime=timecheck();
 
 	CALCBRIGHTNESSFACTOR=1;	//unless changed in initializestarplanet
 	FIXTHETAS=0;
