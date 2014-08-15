@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 #define QUIET 1			//0 -> prints things, 1 -> only prints errors
 #define QUIETMCMC 1		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
-#define WHICHPRINTVIS 2		//2 what sort of visualization file to output (j-1,g-2)
+#define WHICHPRINTVIS 1		//2 what sort of visualization file to output (j-1,g-2)
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
@@ -16,6 +17,7 @@
 #define MCMCTRACKMEM 1000000	//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
 #define PRECALCPLANET 1			//1 -> optimize by precalculating planet effect at each time
 #define COMBINEONESPOT	0		//whether to combine one spot at a time or a whole chain (should be 0)
+#define ALWAYSAVERAGETIME 0		//whether to average time when using maxsteps (in mcmc)
 
 #define MAXSPOTS 10
 #define MAXPLANETS 1
@@ -239,6 +241,13 @@ typedef struct
 	double y,z;  //coords at particular time
 }planetdata;
 
+long int timecheck(void)
+{
+	time_t time0;
+
+	time0=time(NULL);
+	return (long int)time0;
+}
 char isanglebetween(double cw,double ccw,double between)
 {
 	double diftot,difq;
@@ -259,7 +268,6 @@ char isanglebetween(double cw,double ccw,double between)
 	else
 		return 0;
 }
-
 void vwtoyz(double v,double w,int en,double *y,double *z)
 {
 	(*y)=ellipse[en].centery+v*ellipse[en].vhaty+w*ellipse[en].whaty;
@@ -2553,7 +2561,7 @@ int prepfileread(char fn[128],char *datastr,int maxlength)
 	fclose(in);
 }
 int filereadd(int n,double *x,char *datastr,int *current,int end)
-{	//reads n floats from fn and puts them in x[] return 0 if succesful, -1 if not
+{	//reads n doubles from fn and puts them in x[] return 0 if succesful, -1 if not
 	int i,a,b;
 	double y;
 
@@ -2657,7 +2665,7 @@ int filereads(char *rstr,char *datastr,int *current,int end)
 	*current=a;
 	return 0;
 }
-int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filename[64],double *lcstarttime,double *lcfinishtime,double *lcmaxlight,double *ascale,int *mcmcnpop,int *mcmcmaxsteps,int *partitionpop,int *partitionsteps,double *readparam,int *randomseed,char seedfilename[64])
+int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filename[64],double *lcstarttime,double *lcfinishtime,double *lcmaxlight,double *ascale,int *mcmcnpop,long int *mcmcmaxstepsortime,int *partitionpop,int *partitionsteps,double *readparam,int *randomseed,char seedfilename[64])
 {
 	int i,a,b,e;
 	char str[128],datastr[4096];
@@ -2872,7 +2880,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		*randomseed=(int)x[0];
 		*ascale=x[1];
 		*mcmcnpop=(int)x[2];
-		*mcmcmaxsteps=(int)x[3];
+		*mcmcmaxstepsortime=(long int)x[3];
 		CALCBRIGHTNESSFACTOR=(char)x[4];
 		if(i==3||i==7)
 		{
@@ -2963,7 +2971,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	{
 		if(filereadd(3,x,datastr,&a,e)<0)
 			return -26;
-		*mcmcmaxsteps=(int)x[0];
+		*mcmcmaxstepsortime=(long int)x[0];
 		sigmaradius=x[1];
 		sigmaangle=x[2];
 		if(filereadd(numspots*3+1,readparam,datastr,&a,e)<0)
@@ -3912,11 +3920,11 @@ void plotdata(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOT
 		fclose(out);
 	free((void *)param);
 }
-void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,double ascale,int npop,int maxsteps,char rootname[64],char seeded,double readparam[],char seedfilename[64])
+void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,double ascale,int npop,long int maxstepsortime,char rootname[64],char seeded,double readparam[],char seedfilename[64])
 {
 	char goodparams,filename[128];
-	int i,j,k,r,msi,nparam,curstep,potstep,*updated,*naccepted;
-	long int memused;
+	int i,j,k,r,msi,nparam,curstep,potstep,*updated,*naccepted,maxsteps;
+	long int memused,maxtime,time0,time1,avgtime;
 	double **param[2],*chisq[2]; //param[0-1][chain number][parameter number]
 	double sqrtascale,oosqrtascale,smooascale,z,alpha,rn;
 	double bestchisq,*bestparam,torig;
@@ -4159,13 +4167,34 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				bestparam[i]=param[0][0][i];
 		}
 
-	for(msi=0;msi<maxsteps;msi++)
+	if(maxstepsortime>0)
 	{
+		maxsteps=maxstepsortime;
+		maxtime=0;
+	}
+	else
+	{
+		maxsteps=TOOBIG;
+		maxtime=timecheck()-maxstepsortime;  //time limit is passed as negative
+#		if !QUIETMCMC && !QUEIT
+			printf("start time: ~%i maxtime: %i   (%i)\n",timecheck(),maxtime,maxstepsortime);
+#		endif
+	}
+	avgtime=0;
+
+	for(msi=0;msi<maxsteps;msi++)	//the mcmc loop
+	{
+		if(maxtime||ALWAYSAVERAGETIME)
+			time0=timecheck();
 		j=0;
 		for(i=0;i<npop;i++)
 			j+=naccepted[i];
 #		if !QUIETMCMC && !QUIET
-			printf("%i  (%i)\n",msi,j);
+			printf("%i  (%i)",msi,j);
+			if(maxtime||ALWAYSAVERAGETIME)
+				printf("  avg step time: %i\n",avgtime);
+			else
+				printf("\n");
 #		endif
 		if((msi<=100&&msi>=25&&msi%5==0)||(msi%1005==0&&msi>0))
 		{
@@ -4269,6 +4298,13 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		}
 		for(i=0;i<npop;i++)
 			updated[i]=0;
+		if(maxtime||ALWAYSAVERAGETIME)
+		{
+			time1=timecheck();
+			avgtime=(avgtime*msi+time1-time0)/(msi+1);
+			if(maxtime&&time1+2*avgtime>maxtime)
+				maxsteps=0;			//make it stop, time is almost up
+		}
 	}
 
 #	if MCMCTRACKMEM
@@ -4329,6 +4365,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				fprintf(outv,"z\n%lf %lf\n",lclight[i],z);
 #		endif
 	}
+	fprintf(outerr,"average step time: %i\n",avgtime);
 	fclose(parambest);
 	fclose(bestlc);
 	fclose(tracker);
@@ -4594,8 +4631,9 @@ int main(int argc,char *argv[])
 	char filename[64],rootname[64],seedfilename[64];
 	int i,j;
 	int lcn;
-	int mcmcmaxsteps,mcmcnpop,randomseed;
+	int mcmcnpop,randomseed;
 	int partitionpop,partitionsteps;
+	long int mcmcmaxstepsortime;
 	long int memused[2];
 	double *lctime,*lclight,*lcuncertainty,lclightnorm,lcstarttime,lcfinishtime,lcmaxlight,ascale;
 	double *readparam;
@@ -4628,7 +4666,7 @@ int main(int argc,char *argv[])
 #	if !QUIET
 		printf("initializing with parameters from %s\n",filename);
 #	endif
-	j=initializestarplanet(star,planet,filename,&lcstarttime,&lcfinishtime,&lcmaxlight,&ascale,&mcmcnpop,&mcmcmaxsteps,&partitionpop,&partitionsteps,readparam,&randomseed,seedfilename);
+	j=initializestarplanet(star,planet,filename,&lcstarttime,&lcfinishtime,&lcmaxlight,&ascale,&mcmcnpop,&mcmcmaxstepsortime,&partitionpop,&partitionsteps,readparam,&randomseed,seedfilename);
 	srand(randomseed);
 #	if PRINTEACHSPOT
 		spotreport=(double *)malloc(numspots*sizeof(double));
@@ -4720,28 +4758,28 @@ int main(int argc,char *argv[])
 #			if !QUIET
 				printf("starting mcmc\n");
 #			endif
-			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxsteps,rootname,0,readparam,seedfilename);
+			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxstepsortime,rootname,0,readparam,seedfilename);
 		}
 		else if(j==3||j==7)
 		{
 #			if !QUIET
 				printf("starting seeded mcmc\n");
 #			endif
-			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxsteps,rootname,1,readparam,seedfilename);
+			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxstepsortime,rootname,1,readparam,seedfilename);
 		}
 		else if(j==5)
 		{
 #			if !QUIET
 				printf("starting totally seeded mcmc\n");
 #			endif
-			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxsteps,rootname,2,readparam,seedfilename);
+			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxstepsortime,rootname,2,readparam,seedfilename);
 		}
 		else if(j==10)
 		{
 #			if !QUIET
 				printf("starting partially seeded mcmc\n");
 #			endif
-			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxsteps,rootname,3,readparam,seedfilename);
+			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxstepsortime,rootname,3,readparam,seedfilename);
 		}
 	}
 	else if(j==1||j==6)
@@ -4761,7 +4799,7 @@ int main(int argc,char *argv[])
 	{
 		PRINTVIS=0;
 		printf("starting metropolis-hastings\n");
-		metrohast(star,planet,spot,readparam,lcn,lctime,lclight,lcuncertainty,lclightnorm,mcmcmaxsteps,rootname);
+		metrohast(star,planet,spot,readparam,lcn,lctime,lclight,lcuncertainty,lclightnorm,mcmcmaxstepsortime,rootname);
 	}
 	else if(j==4)
 	{
