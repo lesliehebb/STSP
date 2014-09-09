@@ -3,6 +3,23 @@ STSP
 
 In and out of transit starspot modeling code
 
+V4.4.1  2014-09-09
+
+Light curve file now has an extra column that identifies which starspots 
+are interacting with the planet at each time step.  The column is
+a binary number where:  
+no spot-planet overlap = 0
+spot0 overlaps with planet = +1
+spot1 overlaps with planet = +2
+spot k overlaps with planet = +2^k
+
+To turn the number, n, to a string of 0/1 digits:
+Loop over the number of spots (or the number of digits in the n)
+For the ith digit:
+  (1) k = n mod 2
+  (2) spot_flag[i] = k   (this should be 1 or 0)
+  (3) n = (n - k)/2   (subtract 1 and divide by 2)
+
 V4.4  2014-05-23
 
 Fixed bug related to combine 1 spot
