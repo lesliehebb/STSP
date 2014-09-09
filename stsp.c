@@ -18,6 +18,7 @@
 #define PRECALCPLANET 1			//1 -> optimize by precalculating planet effect at each time
 #define COMBINEONESPOT	0		//whether to combine one spot at a time or a whole chain (should be 0)
 #define ALWAYSAVERAGETIME 0		//whether to average time when using maxsteps (in mcmc)
+#define PRINTWHICHSPOT 1		//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
 
 #define MAXSPOTS 10
 #define MAXPLANETS 1
@@ -53,6 +54,8 @@ int errorflag;
 int debuglcni,debugringi,debugtrial;
 int pvasc,pvisc;
 double *spotreport,*ldspotreport;
+char whichspots[16];
+unsigned int ttt[16]={1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768};
 
 typedef struct 
 {		//for ellipse-circle intersections
@@ -1234,7 +1237,10 @@ void checkoverlap(double starradius)
 					if(ellipse[i].active)
 					{
 						if((vc-ellipse[i].smajor)*(vc-ellipse[i].smajor)+wc*wc<circle[0].rsq)	//point on ellipse inside circle
+						{
 							ellipse[i].active=0;	//ellipse completely covered
+							whichspots[ellipse[i].spot]=1;
+						}
 						else if((vc+circle[0].radius)*(vc+circle[0].radius)/(ellipse[i].smajor*ellipse[i].smajor)+wc*wc/(ellipse[i].sminor*ellipse[i].sminor)<1.0)	//point on circle inside ellipse
 						{	
 							ellipsehole[totalnum.ellipsehole].ellipsen=i;
@@ -1242,6 +1248,7 @@ void checkoverlap(double starradius)
 							ellipsehole[totalnum.ellipsehole].area=ellipse[i].area-circle[0].area;
 							totalnum.ellipsehole++;
 							ellipse[i].active=0;
+							whichspots[ellipse[i].spot]=1;
 						}
 					}
 				}
@@ -1258,6 +1265,7 @@ void checkoverlap(double starradius)
 					{
 						createellipsepart(p[1],p[0],i,0,vc,wc);
 						ellipse[i].active=0;
+						whichspots[ellipse[i].spot]=1;
 					}
 				}
 				else if(np==4)
@@ -1274,6 +1282,7 @@ void checkoverlap(double starradius)
 						createellipsepart(p[1],p[2],i,0,vc,wc);
 						createellipsepart(p[3],p[0],i,0,vc,wc);
 						ellipse[i].active=0;
+						whichspots[ellipse[i].spot]=1;
 					}
 				}
 				else
@@ -1317,7 +1326,10 @@ void checkoverlap(double starradius)
 				if(np==0)
 				{
 					if((ellipsearc[cresent[i].ellipsearcn].end[0].v-vc)*(ellipsearc[cresent[i].ellipsearcn].end[0].v-vc)+(ellipsearc[cresent[i].ellipsearcn].end[0].w-wc)*(ellipsearc[cresent[i].ellipsearcn].end[0].w-wc)<circle[0].rsq)
+					{
 						cresent[i].active=0;	//cresent covered by circle
+						whichspots[ellipse[cresent[i].ellipsen].spot]=1;
+					}
 					else if(circle[0].mindcen>cresent[i].mindcen&&circle[0].maxdcen<scirclearc[cresent[i].scirclearcn].radius
 							&&isanglebetween(ellipsearc[cresent[i].ellipsearcn].end[0].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma,atan2(wc,vc)))
 					{	//circle is completly inside cresent
@@ -1326,12 +1338,14 @@ void checkoverlap(double starradius)
 						cresenthole[totalnum.cresenthole].area=cresent[i].area-circle[0].area;
 						totalnum.cresenthole++;
 						cresent[i].active=0;
+						whichspots[ellipse[cresent[i].ellipsen].spot]=1;
 					}
 				}
 				else if(np==2)	//np=2 nq=0
 				{
 					createcresentpart20(ellipse[en].circleint[0][wp[0]],ellipse[en].circleint[0][wp[1]],i,en,0,vc,wc);
 					cresent[i].active=0;
+					whichspots[ellipse[cresent[i].ellipsen].spot]=1;
 				}
 				else
 					errorflag=4;
@@ -1351,12 +1365,14 @@ void checkoverlap(double starradius)
 				{
 					createcresentpart02(q[0],q[1],i,en,0,vc,wc,starradius);
 					cresent[i].active=0;
+					whichspots[ellipse[cresent[i].ellipsen].spot]=1;
 				}
 				else if(np==2)	//np=2 nq=2
 				{
 					createcresentpart11(ellipse[en].circleint[0][wp[0]],q[0],1,i,en,0,vc,wc,starradius);
 					createcresentpart11(ellipse[en].circleint[0][wp[1]],q[1],0,i,en,0,vc,wc,starradius);
 					cresent[i].active=0;
+					whichspots[ellipse[cresent[i].ellipsen].spot]=1;
 				}
 				else
 					errorflag=4;
@@ -1378,6 +1394,7 @@ void checkoverlap(double starradius)
 					else
 						createcresentpart11(ellipse[en].circleint[0][wp[0]],q[0],0,i,en,0,vc,wc,starradius);
 					cresent[i].active=0;
+					whichspots[ellipse[cresent[i].ellipsen].spot]=1;
 				}
 				else
 					errorflag=4;
@@ -3929,6 +3946,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 	double **param[2],*chisq[2]; //param[0-1][chain number][parameter number]
 	double sqrtascale,oosqrtascale,smooascale,z,alpha,rn;
 	double bestchisq,*bestparam,torig;
+	unsigned int whichspot;
 	FILE *parambest,*bestlc,*tracker,*finalparam,*in;
 #	if MCMCTRACKMEM
 		int memtrackind,*memtracki;
@@ -4177,8 +4195,8 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 	{
 		maxsteps=TOOBIG;
 		maxtime=starttime-maxstepsortime;  //time limit is passed as negative
-#		if !QUIETMCMC && !QUEIT
-			printf("start time: %i maxtime: %i   (%i)\n",starttime,maxtime,maxstepsortime);
+#		if !QUIETMCMC && !QUIET
+			printf("start time: %i maxtime: %i   (%i)\n",starttime,maxtime,maxstepsortime*(-1));
 #		endif
 	}
 	avgtime=0;
@@ -4345,6 +4363,10 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 	for(i=0;i<lcn;i++)
 	{
 		torig=lctime[i]/86400.0+planet[0].lct0;
+#		if PRINTWHICHSPOT
+			for(j=0;j<16;j++)
+				whichspots[j]=0;
+#		endif
 		z=lightness(lctime[i],star,planet,spot);
 #		if UNNORMALIZEOUTPUT
 			fprintf(bestlc,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i]/lclightnorm,lcuncertainty[i]/lclightnorm,z/lclightnorm);
@@ -4352,12 +4374,24 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				for(j=0;j<numspots;j++)
 					fprintf(bestlc," %0.6lf",spotreport[j]/lclightnorm);
 #			endif
+#			if PRINTWHICHSPOT
+				whichspot=0;
+				for(j=0;j<16;j++)
+					whichspot+=whichspots[j]*ttt[j];
+				fprintf(bestlc," %i",whichspot);
+#			endif
 			fprintf(bestlc,"\n");
 #		else
 			fprintf(bestlc,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i],lcuncertainty[i],z);
 #			if(PRINTEACHSPOT)
 				for(j=0;j<numspots;j++)
 					fprintf(bestlc," %0.6lf",spotreport[j]);
+#			endif
+#			if PRINTWHICHSPOT
+				whichspot=0;
+				for(j=0;j<16;j++)
+					whichspot+=whichspots[j]*ttt[j];
+				fprintf(bestlc," %i",whichspot);
 #			endif
 			fprintf(bestlc,"\n");
 #		endif
@@ -4385,11 +4419,9 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 }
 void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,char lcoutfilename[128])
 {
-	int i;
-#	if PRINTEACHSPOT
-		int j;
-#	endif
+	int i,j;
 	double light,torig;
+	unsigned int whichspot;
 	FILE *lcout;
 
 	lcout=fopen(lcoutfilename,"w");
@@ -4398,12 +4430,22 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 		debuglcni=i;
 		errorflag=0;
 		torig=lctime[i]/86400.0+planet[0].lct0;
+#		if PRINTWHICHSPOT
+			for(j=0;j<16;j++)
+				whichspots[j]=0;
+#		endif
 		light=lightness(lctime[i],star,planet,spot);
 #		if UNNORMALIZEOUTPUT
 			fprintf(lcout,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i]/lclightnorm,lcuncertainty[i]/lclightnorm,light/lclightnorm);
 #			if PRINTEACHSPOT
 				for(j=0;j<numspots;j++)
 					fprintf(lcout," %0.6lf",spotreport[j]/lclightnorm);
+#			endif
+#			if PRINTWHICHSPOT
+				whichspot=0;
+				for(j=0;j<16;j++)
+					whichspot+=whichspots[j]*ttt[j];
+				fprintf(lcout," %i",whichspot);
 #			endif
 			fprintf(lcout,"\n");
 //			fprintf(lcout,"%0.9lf %0.6lf %0.6lf\n",torig,light/lclightnorm,lcuncertainty[i]/lclightnorm);	//for making test lightcurves
@@ -4412,6 +4454,12 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 #			if PRINTEACHSPOT
 				for(j=0;j<numspots;j++)
 					fprintf(lcout," %0.6lf",spotreport[j]);
+#			endif
+#			if PRINTWHICHSPOT
+				whichspot=0;
+				for(j=0;j<16;j++)
+					whichspot+=whichspots[j]*ttt[j];
+				fprintf(lcout," %i",whichspot);
 #			endif
 			fprintf(lcout,"\n");
 #		endif
