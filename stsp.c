@@ -12,13 +12,14 @@
 #define PRINTEACHSPOT 0
 #define DEFAULTFILENAME "sample-m.in"
 
-#define ORDERSPOTSMETHOD 2		//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
-#define DOWNFROMMAX 11			//how many light curve points down from the max to call the max (for normalization) 
-#define MCMCTRACKMEM 1000000	//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
-#define PRECALCPLANET 1			//1 -> optimize by precalculating planet effect at each time
-#define COMBINEONESPOT	0		//whether to combine one spot at a time or a whole chain (should be 0)
-#define ALWAYSAVERAGETIME 0		//whether to average time when using maxsteps (in mcmc)
-#define PRINTWHICHSPOT 1		//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
+#define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
+#define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
+#define MCMCTRACKMEM 1000000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
+#define PRECALCPLANET 1				//1 -> optimize by precalculating planet effect at each time
+#define COMBINEONESPOT	0			//whether to combine one spot at a time or a whole chain (should be 0)
+#define ALWAYSAVERAGETIME 0			//whether to average time when using maxsteps (in mcmc)
+#define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
+#define PRINTPLANETSPOTOVERLAP 1	//whether to print planet-spot overlap (lcgen only), this may not work if data are normalized
 
 #define MAXSPOTS 10
 #define MAXPLANETS 1
@@ -4419,8 +4420,8 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 }
 void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,char lcoutfilename[128])
 {
-	int i,j;
-	double light,torig;
+	int i,j,realnum;
+	double light,torig,l1,l2;
 	unsigned int whichspot;
 	FILE *lcout;
 
@@ -4435,34 +4436,33 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 				whichspots[j]=0;
 #		endif
 		light=lightness(lctime[i],star,planet,spot);
-#		if UNNORMALIZEOUTPUT
-			fprintf(lcout,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i]/lclightnorm,lcuncertainty[i]/lclightnorm,light/lclightnorm);
-#			if PRINTEACHSPOT
-				for(j=0;j<numspots;j++)
-					fprintf(lcout," %0.6lf",spotreport[j]/lclightnorm);
-#			endif
-#			if PRINTWHICHSPOT
-				whichspot=0;
-				for(j=0;j<16;j++)
-					whichspot+=whichspots[j]*ttt[j];
-				fprintf(lcout," %i",whichspot);
-#			endif
-			fprintf(lcout,"\n");
-//			fprintf(lcout,"%0.9lf %0.6lf %0.6lf\n",torig,light/lclightnorm,lcuncertainty[i]/lclightnorm);	//for making test lightcurves
-#		else
-			fprintf(lcout,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i],lcuncertainty[i],light);
-#			if PRINTEACHSPOT
-				for(j=0;j<numspots;j++)
-					fprintf(lcout," %0.6lf",spotreport[j]);
-#			endif
-#			if PRINTWHICHSPOT
-				whichspot=0;
-				for(j=0;j<16;j++)
-					whichspot+=whichspots[j]*ttt[j];
-				fprintf(lcout," %i",whichspot);
-#			endif
-			fprintf(lcout,"\n");
+#		if !UNNORMALIZEOUTPUT
+			lclightnorm=1.0;
 #		endif
+		fprintf(lcout,"%0.9lf %0.6lf %0.6lf %0.6lf",torig,lclight[i]/lclightnorm,lcuncertainty[i]/lclightnorm,light/lclightnorm);
+#		if PRINTEACHSPOT
+			for(j=0;j<numspots;j++)
+				fprintf(lcout," %0.6lf",spotreport[j]/lclightnorm);
+#		endif
+#		if PRINTWHICHSPOT
+			whichspot=0;
+			for(j=0;j<16;j++)
+				whichspot+=whichspots[j]*ttt[j];
+			fprintf(lcout," %i",whichspot);
+#		endif
+#		if PRINTPLANETSPOTOVERLAP
+			realnum=numplanets;
+			numplanets=0;
+			l1=lightness(lctime[i],star,planet,spot);
+			numplanets=realnum;
+			realnum=numspots;
+			numspots=0;
+			l2=lightness(lctime[i],star,planet,spot);
+			numspots=realnum;
+			fprintf(lcout," %0.6lf",(light-l1-l2+star->area)/lclightnorm);
+#		endif
+		fprintf(lcout,"\n");
+//			fprintf(lcout,"%0.9lf %0.6lf %0.6lf\n",torig,light/lclightnorm,lcuncertainty[i]/lclightnorm);	//for making test lightcurves
 		if(errorflag)
 		{
 			fprintf(outerr,"error %i at datum %i (location 1)\n",errorflag,i);
