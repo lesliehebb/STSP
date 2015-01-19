@@ -3,14 +3,14 @@
 #include <math.h>
 #include <time.h>
 
-#define QUIET 1			//0 -> prints things, 1 -> only prints errors
-#define QUIETMCMC 1		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
+#define QUIET 0			//0 -> prints things, 1 -> only prints errors
+#define QUIETMCMC 0		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
 #define WHICHPRINTVIS 1		//2 what sort of visualization file to output (j-1,g-2)
-#define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
+#define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "sample-m.in"
+#define DEFAULTFILENAME "172n8s_L.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -19,7 +19,7 @@
 #define COMBINEONESPOT	0			//whether to combine one spot at a time or a whole chain (should be 0)
 #define ALWAYSAVERAGETIME 0			//whether to average time when using maxsteps (in mcmc)
 #define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
-#define PRINTPLANETSPOTOVERLAP 1	//whether to print planet-spot overlap (lcgen only), this may not work if data are normalized
+#define PRINTPLANETSPOTOVERLAP 1	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
 
 #define MAXSPOTS 10
 #define MAXPLANETS 1
@@ -3273,7 +3273,7 @@ void setrandomparam(double p[],stardata *star)
 double modelmaxlight(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS])
 {
 //	FILE *debugmml;
-	int realnumplanets,i,j,k,nt,localmaxind[2];
+	int realprintvis,realnumplanets,i,j,k,nt,localmaxind[2];
 	double period,t,dt,light[360],localmaxl[2],t0,t1,l0,l1;
 //	debugmml=fopen("debugmml.txt","w");
 	star->brightnessfactor=1.0;
@@ -3282,6 +3282,8 @@ double modelmaxlight(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[
 	period=PIt2/star->omega;
 	nt=360;
 	dt=period/nt;
+	realprintvis=PRINTVIS;
+	PRINTVIS=0;
 	for(i=0;i<360;i++)
 	{
 		t=dt*((double)i);
@@ -3372,6 +3374,7 @@ double modelmaxlight(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[
 //		fprintf(debugmml,"localmaxl[%i]= %lf\n\n",i,localmaxl[i]);
 	}
 	numplanets=realnumplanets;
+	PRINTVIS=realprintvis;
 //	fclose(debugmml);
 	if(localmaxl[0]>localmaxl[1])
 		return localmaxl[0];
