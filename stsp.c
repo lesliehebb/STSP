@@ -10,7 +10,7 @@
 #define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "172n8s_L.in"
+#define DEFAULTFILENAME "test360-12makelightcurve.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -3970,7 +3970,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		memtrackind=0;
 #	endif
 #	if !QUIET && MCMCTRACKMEM
-		printf("memory used for tracker buffer: %i\n",3*MCMCTRACKMEM*sizeof(int)+(nparam+1)*MCMCTRACKMEM*sizeof(double));
+		printf("memory used for tracker buffer: %lu\n",3*MCMCTRACKMEM*sizeof(int)+(nparam+1)*MCMCTRACKMEM*sizeof(double));
 #	endif
 
 	sprintf(filename,"%s_parambest.txt",rootname);
@@ -4040,7 +4040,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		}
 	}
 #	if !QUIET
-		printf("memory used for mcmc: %i\n",memused);
+		printf("memory used for mcmc: %li\n",memused);
 #	endif
 	bestparam=(double *)malloc(nparam*sizeof(double));
 
@@ -4200,7 +4200,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		maxsteps=TOOBIG;
 		maxtime=starttime-maxstepsortime;  //time limit is passed as negative
 #		if !QUIETMCMC && !QUIET
-			printf("start time: %i maxtime: %i   (%i)\n",starttime,maxtime,maxstepsortime*(-1));
+			printf("start time: %li maxtime: %li   (%li)\n",starttime,maxtime,maxstepsortime*(-1));
 #		endif
 	}
 	avgtime=0;
@@ -4215,7 +4215,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 #		if !QUIETMCMC && !QUIET
 			printf("%i  (%i)",msi,j);
 			if(maxtime||ALWAYSAVERAGETIME)
-				printf("  avg step time: %i\n",avgtime);
+				printf("  avg step time: %li\n",avgtime);
 			else
 				printf("\n");
 #		endif
@@ -4405,7 +4405,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 #		endif
 	}
 	if(maxtime||ALWAYSAVERAGETIME)
-		fprintf(outerr,"average step time: %i\n",avgtime);
+		fprintf(outerr,"average step time: %li\n",avgtime);
 	fclose(parambest);
 	fclose(bestlc);
 	fclose(tracker);
@@ -4759,7 +4759,7 @@ int main(int argc,char *argv[])
 	memused[0]+=FOURMAXSPOTSMAXPLANETS*(sizeof(tellipsearc)+sizeof(tscirclearc));
 	memused[1]=MAXSPOTS*3*sizeof(double)+3*lcn*sizeof(double);
 #	if !QUIET
-		printf("memory used for initialization: (%i+%i) = %i\n",memused[0],memused[1],memused[0]+memused[1]);
+		printf("memory used for initialization: (%li+%li) = %li\n",memused[0],memused[1],memused[0]+memused[1]);
 #	endif
 	if(i<0)
 	{
@@ -4801,7 +4801,7 @@ int main(int argc,char *argv[])
 			printf("malloc error initializing totalnumcircle\n");
 		initializeprecalcplanet(star,planet,lcn,lctime);
 #		if !QUIET
-			printf("  memory used: %i\n done initializing precalcplanet\n",lcn*sizeof(tcircle)*MAXPLANETS+lcn*sizeof(int));
+			printf("  memory used: %li\n done initializing precalcplanet\n",lcn*sizeof(tcircle)*MAXPLANETS+lcn*sizeof(int));
 #		endif
 #	endif
 
