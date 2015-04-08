@@ -3,6 +3,26 @@ STSP
 
 In and out of transit starspot modeling code
 
+V4.4.2  2015-04-08
+
+L & G fixed bug in combining solutions from the walkers, which should help speed up convergence.
+
+
+### NOTE
+The default mode should have these flags set in the top of the code, which improves speed during the MCMC solutions being run in bulk.
+
+    #define QUIET 1
+    #define QUIETMCMC 1
+    #define ANYPRINTVIS 0
+    
+To get the optional visaulization outputs to work (action L), change them to this and recompile STSP:
+
+    #define QUIET 0
+    #define QUIETMCMC 0   // optional
+    #define ANYPRINTVIS 1
+
+
+
 V4.4.1  2014-09-09
 
 Light curve file now has an extra column that identifies which starspots 
@@ -73,7 +93,7 @@ The input file for stsp has the following structure:
 New input file:
 
 The input file for stsp has the following structure:
-#Input File Stucture
+##Input File Stucture
     #PLANET PROPERTIES
     1                      ; Number of planets
     132.792729             ; T0, epoch in days (time of the middle of first transit)  

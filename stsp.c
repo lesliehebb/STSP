@@ -3,20 +3,21 @@
 #include <math.h>
 #include <time.h>
 
-#define QUIET 0			//0 -> prints things, 1 -> only prints errors
-#define QUIETMCMC 0		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
+#define QUIET 1			//0 -> prints things, 1 -> only prints errors
+#define QUIETMCMC 1		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
-#define WHICHPRINTVIS 1		//2 what sort of visualization file to output (j-1,g-2)
-#define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
+#define WHICHPRINTVIS 1		// what sort of visualization file to output (j-1,g-2)
+#define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "test360-12makelightcurve.in"
+#define DEFAULTFILENAME "dbmcmc.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
 #define MCMCTRACKMEM 1000000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
 #define PRECALCPLANET 1				//1 -> optimize by precalculating planet effect at each time
 #define COMBINEONESPOT	0			//whether to combine one spot at a time or a whole chain (should be 0)
+
 #define ALWAYSAVERAGETIME 0			//whether to average time when using maxsteps (in mcmc)
 #define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
 #define PRINTPLANETSPOTOVERLAP 1	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
@@ -38,6 +39,8 @@
 #define TOOSMALL (-1000000000)
 #define ACCEPTABLEERROR (0.000001)
 
+#define DEBUGMCMC 1
+
 int NLDRINGS;				//number of rings for limb darkening
 char PRINTVIS;				//whether to print a vis file
 char FIXTHETAS;				//whether to fix the latitudes of the spots
@@ -57,6 +60,10 @@ int pvasc,pvisc;
 double *spotreport,*ldspotreport;
 char whichspots[16];
 unsigned int ttt[16]={1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768};
+
+#if DEBUGMCMC
+FILE *dbmcmc;
+#endif
 
 typedef struct 
 {		//for ellipse-circle intersections
@@ -2263,7 +2270,7 @@ double fixldstararea(stardata *star,int ringi)
 double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS])
 {
 	int i,j,realnumplanets;
-	double totlight,morelight,planetsin,planetcos,torig,thelightness;
+	double totlight,morelight,planetsin,planetcos,torig,thelightness,noplanetlightness;
 
 	torig=t/86400.0+planet->lct0;
 #	if ANYPRINTVIS
@@ -2379,9 +2386,11 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 		thelightness=star->brightnessfactor*star->area*totlight/star->maxlight;	//normalized to PI*Rstar^2 * brightnessfactor
 	else
 	{
+		thelightness=star->brightnessfactor*star->area*totlight/star->maxlight;
 		realnumplanets=numplanets;
 		numplanets=0;
-		thelightness=star->brightnessfactor*star->area*totlight/star->maxlight-lightness(t,star,planet,spot);  //flattened to 0 outside transits
+		noplanetlightness=lightness(t,star,planet,spot);
+		thelightness=thelightness-noplanetlightness+PI;  //flattened to remove spot effects except planet-spot crossings
 		numplanets=realnumplanets;
 	}
 	return thelightness;
@@ -2390,7 +2399,7 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 double lightnessindexed(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int timeindex)
 {
 	int i,j,realnumplanets;
-	double totlight,morelight,torig,thelightness;
+	double totlight,morelight,torig,thelightness,noplanetlightness;
 
 #	if ANYPRINTVIS
 		if(PRINTVIS)
@@ -2446,9 +2455,11 @@ double lightnessindexed(double t,stardata *star,planetdata planet[MAXPLANETS],sp
 		thelightness=star->brightnessfactor*star->area*totlight/star->maxlight;	//normalized to PI*Rstar^2 * brightnessfactor
 	else
 	{
+		thelightness=star->brightnessfactor*star->area*totlight/star->maxlight;
 		realnumplanets=numplanets;
 		numplanets=0;
-		thelightness=star->brightnessfactor*star->area*totlight/star->maxlight-lightness(t,star,planet,spot);  //flattened to 0 outside transits
+		noplanetlightness=lightness(t,star,planet,spot);
+		thelightness=thelightness-noplanetlightness+PI;  //flattened to remove spot effects except planet-spot crossings
 		numplanets=realnumplanets;
 	}
 	return thelightness;
@@ -2943,8 +2954,8 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 				return -31;
 			numseeded=(int)x[0];	//number of seeded spots
 			FIXSEEDEDONLYPHI=(int)x[1];
-			if(FIXSEEDEDONLYPHI)
-			{
+			if(FIXSEEDEDONLYPHI)         //only phi or fix none
+			{   
 				if(filereadd(2,x,datastr,&a,e)<0)
 					return -32;
 				sigmaradius=x[0];
@@ -3222,7 +3233,8 @@ void setrandomparam(double p[],stardata *star)
 	k=0;
 	for(i=0;i<numspots;i++)
 	{
-		p[3*i]=RND*star->r;   //radius
+		p[3*i]=RND*star->r*0.1;   //radius -prefer small spots to start 
+//		p[3*i]=RND*star->r;   //radius -original version
 		if(!FIXTHETAS)
 			p[3*i+1]=acos(2.0*RND-1.0);	 //theta
 		p[3*i+2]=RND*PIt2; //phi
@@ -3502,7 +3514,7 @@ void combineonespot(double p0[],double p1[],double p2[],double z)
 			p2[j*3+1]=p1[j*3+1];
 			p2[j*3+2]=p1[j*3+2];
 		}
-	p2[i*3]=z*p0[i*3]+(1.0-z)*p1[i*3];
+	p2[i*3]=p0[i*3]+z*(p1[i*3]-p0[i*3]);
 	combineangles(p0[i*3+1],p0[i*3+2],p1[i*3+1],p1[i*3+2],z,thphi);
 	p2[i*3+1]=thphi[0];
 	p2[i*3+2]=thphi[1];
@@ -3522,7 +3534,7 @@ void combineonespot(double p0[],double p1[],double p2[],double z)
 		p2[i*3+2]-=PIt2;
 }
 #endif
-void combineparam(double p0[],double p1[],double p2[],double z)
+void combineparam(double p0[],double p1[],double p2[],double z,double starradius)
 {
 	int i;
 	double thphi[2];
@@ -3534,12 +3546,12 @@ void combineparam(double p0[],double p1[],double p2[],double z)
 		{
 			for(i=0;i<numspots*3;i++)
 				p2[i]=p1[i];
-			p2[numspots*3]=z*p0[numspots*3]+(1.0-z)*p1[numspots*3];
+			p2[numspots*3]=p0[numspots*3]+z*(p1[numspots*3]-p0[numspots*3]);
 		}
 #	else
 		for(i=0;i<numspots;i++)
 		{
-			p2[i*3]=z*p0[i*3]+(1.0-z)*p1[i*3];
+			p2[i*3]=p0[i*3]+z*(p1[i*3]-p0[i*3]);
 			combineangles(p0[i*3+1],p0[i*3+2],p1[i*3+1],p1[i*3+2],z,thphi);
 			p2[i*3+1]=thphi[0];
 			p2[i*3+2]=thphi[1];
@@ -3559,7 +3571,7 @@ void combineparam(double p0[],double p1[],double p2[],double z)
 				p2[i*3+2]-=PIt2;
 		}
 		if(!CALCBRIGHTNESSFACTOR)
-			p2[numspots*3]=z*p0[numspots*3]+(1.0-z)*p1[numspots*3];
+			p2[numspots*3]=p0[numspots*3]+z*(p1[numspots*3]-p0[numspots*3]);
 #	endif
 }
 int orderspots(double param[])
@@ -3699,7 +3711,10 @@ char rndvarparam(double param[],double rndparam[],double sigmaspotradius,double 
 			if(i<numseeded)
 			{
 				rndparam[i*3+1]=normaldist(param[i*3+1],sigmaspotpos);
-				rndparam[i*3+2]=param[i*3+2];
+				if(FIXSEEDEDONLYPHI>1)  
+					rndparam[i*3+2]=normaldist(param[i*3+2],sigmaspotpos);  //fix nothing
+				else
+					rndparam[i*3+2]=param[i*3+2];  //fix only phi
 			}
 			else
 			{
@@ -3838,16 +3853,146 @@ void metrohast(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPO
 	free((void *)potparam);
 
 }
+double plotdataopt(int varyspot,int wntv,double hrange,double *param,stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm)
+{
+	int TIMESTOBIF=10;  //how many times to split the segment
+	char goodparams;
+	double best,bestp[2],chisqt[11],startp;
+	int i,j,vind,besti=0;
+
+	best=TOOBIG-1;
+	vind=3*varyspot+wntv;
+	startp=param[vind];
+	for(i=(-5);i<=5;i++)
+	{
+		param[vind]=startp+((double)i/5.0)*hrange;
+		goodparams=setspots(param,spot,star,planet);
+		if(goodparams)
+			chisqt[i+5]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
+		else
+			chisqt[i+5]=TOOBIG;
+		if(chisqt[i+5]<best)
+		{
+			besti=i;
+			best=chisqt[i+5];
+		}
+	}
+
+	if(besti==(-5))
+	{
+		bestp[0]=startp-hrange;
+		bestp[1]=startp-0.8*hrange;
+	}
+	else if(besti==5)
+	{
+	
+		bestp[0]=startp+0.8*hrange;
+		bestp[1]=startp+hrange;
+		chisqt[0]=chisqt[9];
+		chisqt[1]=chisqt[10];
+	}
+	else if(chisqt[besti+4]<chisqt[besti+6])
+	{
+		bestp[0]=startp+((double)(besti-1)/5.0)*hrange;
+		bestp[1]=startp+((double)besti/5.0)*hrange;
+		chisqt[0]=chisqt[besti+4];
+		chisqt[1]=chisqt[besti+5];
+	}
+	else
+	{
+		bestp[0]=startp+((double)besti/5.0)*hrange;
+		bestp[1]=startp+((double)(besti+1)/5.0)*hrange;
+		chisqt[0]=chisqt[besti+5];
+		chisqt[1]=chisqt[besti+6];
+	}
+
+	for(i=0;i<TIMESTOBIF;i++)
+	{
+		if(chisqt[0]<chisqt[1])
+			j=1;
+		else
+			j=0;
+		bestp[j]=0.5*(bestp[0]+bestp[1]);
+		param[vind]=bestp[j];
+		goodparams=setspots(param,spot,star,planet);
+		if(goodparams)
+			chisqt[j]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
+		else
+			chisqt[j]=TOOBIG;
+	}
+
+	if(chisqt[0]<chisqt[1])
+	{
+		param[vind]=bestp[0];
+		return chisqt[0];
+	}
+	else
+	{
+		param[vind]=bestp[1];
+		return chisqt[1];
+	}
+}
+void plotdatacolor(char colorscheme, double x, int *r, int *g,int *b)
+{
+	int red=0,green=0,blue=0;
+	double col[4];
+
+	if(colorscheme==0)
+	{
+		col[0]=100.0;	
+		col[1]=600.0;
+		col[2]=1200.0;
+		col[3]=5000.0;
+
+		red=255-((int)(x*255.0/col[0]));
+		if(red<0)
+			red=0;
+		if(x<col[1])
+			green=255-(int)(255.0*(col[1]-x)/(col[1]-col[0]));
+		else
+			green=255-(int)(255.0*(x-col[1])/(col[2]-col[1]));
+		if(green<0)
+			green=0;
+		blue=255-(int)(255.0*(col[3]-x)/(col[3]-col[2]));
+		if(blue<0)
+			blue=0;
+		if(blue>255)
+			blue=255;
+	}
+	else if(colorscheme==1)
+	{
+		col[0]=2;
+		col[1]=30;
+
+		if(x*col[0]<255)
+			red=(int)(255.0-x*col[0]);
+		else
+			green=(int)(col[1]*log10(col[0]*x-250));
+		if(red<0)
+			red=0;
+		if(red>255)
+			red=255;
+		if(green<0)
+			green=0;
+		if(green>255)
+			green=255;
+	}
+
+	*r=red;
+	*g=green;
+	*b=blue;
+}
 void plotdata(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,int varyspot,double readparam[],char rootname[64])
 {
 	char goodparams,filename[128],innotout;
-	int i,j,k,n,nparam,red,green,blue;
-	int rhgrid=100,thhgrid=600,phihgrid=0,w,h;
-	double rhrange=0.03,thhrange=0.4,phihrange=0.01;
+	char wtv[2],wntv,optimize;  //which parameter to vary,which not to vary (the other one), whether to optimize the unvaried parameter
+	int i,j,n,nparam,red,green,blue;
+	int hgrid[3],w,h;  //number of points to vary to, half grid
+	double hrange[3];  //half range of variation
 	double *param,chisq; //param[0-1][chain number][parameter number]
 	FILE *out,*outppm,*in;
 
-	innotout=0;
+	innotout=1;  //1 for reading previous run's data and changing the colors
 
 	sprintf(filename,"%s_%i_plotdata.txt",rootname,varyspot);
 	if(innotout)
@@ -3877,65 +4022,67 @@ void plotdata(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOT
 		exit(0);
 	}
 
-	h=2*rhgrid+1;
-	w=2*thhgrid+1;
+	wtv[0]=1;  //what parameters to vary and what not to, 0=raduis, 1=theta, 2=phi
+	wtv[1]=0;
+	wntv=2;
+	optimize=0;  //1->optimize unvaried parameter, 0->use seed value
+
+	hgrid[0]=250;		//radius			need range for optimized parameters as well
+	hrange[0]=0.1;
+	hgrid[1]=250;	//theta
+	hrange[1]=0.5;
+	hgrid[2]=0;	//phi
+	hrange[2]=0.0;
+
+	h=2*hgrid[wtv[0]]+1;
+	w=2*hgrid[wtv[1]]+1;
 	fprintf(outppm,"P3\n%i %i\n255\n",w,h);
 
 	n=0;
-	for(i=-rhgrid;i<=rhgrid;i++)
-		for(j=-thhgrid;j<=thhgrid;j++)
-			for(k=-phihgrid;k<=phihgrid;k++)
+	goodparams=1;
+	for(i=-hgrid[wtv[0]];i<=hgrid[wtv[0]];i++)
+		for(j=-hgrid[wtv[1]];j<=hgrid[wtv[1]];j++)
+		{ 
+			param[varyspot*3+wtv[0]]=readparam[varyspot*3+wtv[0]]+((double)i)*((double)hrange[wtv[0]])/hgrid[wtv[0]];
+			param[varyspot*3+wtv[1]]=readparam[varyspot*3+wtv[1]]+((double)j)*((double)hrange[wtv[1]])/hgrid[wtv[1]];
+			param[varyspot*3+wntv]=readparam[varyspot*3+wntv];
+
+			if(innotout)
+				fscanf(in,"%lf %lf %lf %lf\n",param+varyspot*3,param+varyspot*3+1,param+varyspot*3+2,&chisq);
+			else
 			{
-				param[varyspot*3]=readparam[varyspot*3]+((double)i)*((double)rhrange)/rhgrid;
-				param[varyspot*3+1]=readparam[varyspot*3+1]+((double)j)*((double)thhrange)/thhgrid;
-				if(phihgrid==0)
-					param[varyspot*3+2]=readparam[varyspot*3+2];
+				if(optimize)
+					chisq=plotdataopt(varyspot,wntv,hrange[wntv],param,star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm);
 				else
-					param[varyspot*3+2]=readparam[varyspot*3+2]+((double)k)*((double)phihrange)/phihgrid;
-				if(innotout)
-					goodparams=1;
-				else
+				{
 					goodparams=setspots(param,spot,star,planet);
-				if(goodparams)
-				{
-					if(innotout)
-						fscanf(in,"%lf %lf %lf %lf\n",param+varyspot*3,param+varyspot*3+1,param+varyspot*3+2,&chisq);
-					else
-					{
+					if(goodparams)
 						chisq=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
-						fprintf(out,"%lf %lf %lf %lf\n",param[varyspot*3],param[varyspot*3+1],param[varyspot*3+2],chisq);
-					}
-					red=255-((int)(chisq/1000.0));
-					if(red<0)
-						red=0;
-					green=((int)(chisq/10000.0))-25;
-					if(green>255)
-						green=510-green;
-					if(green<0)
-						green=0;
-					blue=((int)(chisq/100000.0))-5;
-					if(blue<0)
-						blue=0;
-					if(blue>255)
-						blue=255;
-					fprintf(outppm,"%i %i %i\n",red,green,blue);
-					printf(".");
 				}
-				else
-				{
-					printf("x");
-					red=255;
-					blue=255;
-					green=255;
-					fprintf(outppm,"%i %i %i\n",red,green,blue);
-				}
-				n++;
-				if(n==25)
-				{
-					printf(" %i %i %i\n",i,j,k);
-					n=0;
-				}
+				fprintf(out,"%lf %lf %lf %lf\n",param[varyspot*3],param[varyspot*3+1],param[varyspot*3+2],chisq);
 			}
+			if(goodparams)
+			{
+				plotdatacolor(1,chisq,&red,&green,&blue);
+				fprintf(outppm,"%i %i %i\n",red,green,blue);
+				printf(".");
+			}
+			else
+			{
+				printf("x");
+				red=255;
+				blue=255;
+				green=255;
+				fprintf(outppm,"%i %i %i\n",red,green,blue);
+			}
+			n++;
+			if(n==25)
+			{
+				printf(" %i %i\n",i,j);
+				n=0;
+			}
+		}
+		
 	if(innotout)
 		fclose(in);
 	else
@@ -3955,6 +4102,9 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 #	if MCMCTRACKMEM
 		int memtrackind,*memtracki;
 		double *memtrackd;
+#	endif
+#	if DEBUGMCMC
+		int d;
 #	endif
 
 	nparam=3*numspots+1; //r, theta, phi of spots, then unoccluded star brightness factor
@@ -4244,7 +4394,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				k=(naccepted[r]+updated[r])%2;
 			else
 				k=naccepted[r]%2;
-			combineparam(param[k][r],param[curstep][i],param[potstep][i],z);					
+			combineparam(param[k][r],param[curstep][i],param[potstep][i],z,star->r);					
 			goodparams=setspots(param[potstep][i],spot,star,planet);
 			if(goodparams)
 				chisq[potstep][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
@@ -4261,13 +4411,28 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 					k=(naccepted[r]+updated[r])%2;
 				else
 					k=naccepted[r]%2;
-				combineparam(param[k][r],param[curstep][i],param[potstep][i],z);					
+				combineparam(param[k][r],param[curstep][i],param[potstep][i],z,star->r);					
 				goodparams=setspots(param[potstep][i],spot,star,planet);
 				if(goodparams)
 					chisq[potstep][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
 				else
 					chisq[potstep][i]=(-2);
 			}
+#			if DEBUGMCMC
+				if(i==5)
+				{
+					fprintf(dbmcmc,"%i %lf ",msi,z);
+					for(d=0;d<nparam;d++)
+						fprintf(dbmcmc,"%lf ",param[curstep][i][d]);
+					fprintf(dbmcmc,"%lf ",chisq[curstep][i]);
+					for(d=0;d<nparam;d++)
+						fprintf(dbmcmc,"%lf ",param[k][r][d]);
+					fprintf(dbmcmc,"%lf ",chisq[k][r]);
+					for(d=0;d<nparam;d++)
+						fprintf(dbmcmc,"%lf ",param[potstep][i][d]);
+					fprintf(dbmcmc,"%lf ",chisq[potstep][i]);
+				}
+#			endif
 			if(chisq[potstep][i]>=0)
 			{
 				alpha=pow(z,nparam-1)*exp(-0.5*(chisq[potstep][i]-chisq[curstep][i]));
@@ -4278,6 +4443,16 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				alpha=0;	//make it reject
 				rn=1;
 			}
+
+#			if DEBUGMCMC
+				if(i==5)
+				{
+					if(alpha>=rn)
+						fprintf(dbmcmc,"1\n");
+					else
+						fprintf(dbmcmc,"0\n");
+				}
+#			endif
 
 			if(alpha>=rn)
 			{	//accept step
@@ -4712,6 +4887,12 @@ int main(int argc,char *argv[])
 	if(rootname[j-3]=='.'&&rootname[j-2]=='i'&&rootname[j-1]=='n')
 		rootname[j-3]=0;
 
+#	if DEBUGMCMC
+		char dbfn[64];
+		sprintf(dbfn,"%s_dbmcmc.txt",rootname);
+		dbmcmc=fopen(dbfn,"w");
+#	endif
+
 	readparam=(double *)malloc(MAXSPOTS*3*sizeof(double));
 	if(readparam==NULL) 
 	{
@@ -4866,7 +5047,6 @@ int main(int argc,char *argv[])
 		printf("starting plot data for one spot variation\n");
 		plotdata(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,randomseed,readparam,rootname);
 	}
-
 	else if(j==100)
 	{
 		gentimetest(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,0,readparam);
@@ -4885,6 +5065,9 @@ int main(int argc,char *argv[])
 	{
 		free((void *)spotreport);
 		free((void *)ldspotreport);
+#	endif
+#	if DEBUGMCMC
+		fclose(dbmcmc);
 #	endif
 
 	return 0;
