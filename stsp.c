@@ -3,20 +3,21 @@
 #include <math.h>
 #include <time.h>
 
-#define QUIET 1			//0 -> prints things, 1 -> only prints errors
-#define QUIETMCMC 1		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
+#define QUIET 0			//0 -> prints things, 1 -> only prints errors
+#define QUIETMCMC 0		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
 #define WHICHPRINTVIS 1		// what sort of visualization file to output (j-1,g-2)
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "dbmcmc.in"
+#define DEFAULTFILENAME "jtest.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
 #define MCMCTRACKMEM 1000000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
 #define PRECALCPLANET 1				//1 -> optimize by precalculating planet effect at each time
 #define COMBINEONESPOT	0			//whether to combine one spot at a time or a whole chain (should be 0)
+#define COMBINERSINTHETA 0			//whether to use r or r*sin(theta) as the combination variable
 
 #define ALWAYSAVERAGETIME 0			//whether to average time when using maxsteps (in mcmc)
 #define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
@@ -39,7 +40,7 @@
 #define TOOSMALL (-1000000000)
 #define ACCEPTABLEERROR (0.000001)
 
-#define DEBUGMCMC 1
+#define DEBUGMCMC 0
 
 int NLDRINGS;				//number of rings for limb darkening
 char PRINTVIS;				//whether to print a vis file
@@ -3497,6 +3498,32 @@ void combineangles(double theta0,double phi0,double theta1,double phi1,double z,
 	else if(thphi2[1]>PIt2) thphi2[1]-=PIt2;
 	
 }
+double combiners(double r0,double theta0,double r1,double theta1,double theta2,double z,stardata *star)
+{
+#	if COMBINERSINTHETA
+		double rtheta0,rtheta1,rtheta2;
+		double psize0,psize1,psize2,r2;
+		rtheta0=theta0+star->theta;
+		rtheta1=theta1+star->theta;
+		rtheta2=theta2+star->theta;
+		if(r0>star->r*sin(rtheta0)||r1>star->r*sin(theta1))
+			r2=r0+z*(r1-r0);
+		else
+		{
+			psize0=r0*r0*sin(rtheta0);
+			psize1=r1*r1*sin(rtheta1);
+			psize2=psize0+z*(psize1-psize0);
+			if(psize2<0)
+				r2=(-1);  //setspots doesn't notice -nan as not a good param, so give it -1
+			else
+				r2=sqrt(psize2/sin(rtheta2));
+		}
+
+		return r2;
+#	else
+		return r0+z*(r1-r0);
+#	endif
+}
 #if COMBINEONESPOT
 void combineonespot(double p0[],double p1[],double p2[],double z)
 {
@@ -3534,7 +3561,7 @@ void combineonespot(double p0[],double p1[],double p2[],double z)
 		p2[i*3+2]-=PIt2;
 }
 #endif
-void combineparam(double p0[],double p1[],double p2[],double z,double starradius)
+void combineparam(double p0[],double p1[],double p2[],double z,stardata *star)
 {
 	int i;
 	double thphi[2];
@@ -3551,10 +3578,10 @@ void combineparam(double p0[],double p1[],double p2[],double z,double starradius
 #	else
 		for(i=0;i<numspots;i++)
 		{
-			p2[i*3]=p0[i*3]+z*(p1[i*3]-p0[i*3]);
 			combineangles(p0[i*3+1],p0[i*3+2],p1[i*3+1],p1[i*3+2],z,thphi);
 			p2[i*3+1]=thphi[0];
 			p2[i*3+2]=thphi[1];
+			p2[i*3]=combiners(p0[i*3],p0[i*3+1],p1[i*3],p1[i*3+1],p2[i*3+1],z,star);
 			if(p2[i*3+1]<0)
 			{
 				p2[i*3+1]=(-p2[i*3+1]);
@@ -4329,6 +4356,16 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		}
 	}
 
+	for(i=0;i<npop;i++)		//print out initial chains to _mcmc file
+	{
+		fprintf(tracker,"%i %i %i %lf",i,0,0,chisq[0][i]);
+		for(j=0;j<nparam;j++)
+			fprintf(tracker," %lf",param[0][i][j]);
+		fprintf(tracker,"\n");
+	}
+
+
+
 	bestchisq=chisq[0][0];
 	for(i=0;i<nparam;i++)
 		bestparam[i]=param[0][0][i];
@@ -4394,7 +4431,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				k=(naccepted[r]+updated[r])%2;
 			else
 				k=naccepted[r]%2;
-			combineparam(param[k][r],param[curstep][i],param[potstep][i],z,star->r);					
+			combineparam(param[k][r],param[curstep][i],param[potstep][i],z,star);					
 			goodparams=setspots(param[potstep][i],spot,star,planet);
 			if(goodparams)
 				chisq[potstep][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
@@ -4411,7 +4448,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 					k=(naccepted[r]+updated[r])%2;
 				else
 					k=naccepted[r]%2;
-				combineparam(param[k][r],param[curstep][i],param[potstep][i],z,star->r);					
+				combineparam(param[k][r],param[curstep][i],param[potstep][i],z,star);					
 				goodparams=setspots(param[potstep][i],spot,star,planet);
 				if(goodparams)
 					chisq[potstep][i]=findchisq(star,planet,spot,lcn,lctime,lclight,lcuncertainty);
