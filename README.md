@@ -3,6 +3,14 @@ STSP
 
 In and out of transit starspot modeling code
 
+V4.4.3  2015-07-15
+
+Added a #define to use latitude and R * sin(latitute) as the parameters of interest instead of R and latitude (R=radius of spot)
+to make the parameters more orthogonal.  This functionality will not help make parameters more orthogonal when
+star and planet are misaligned
+
+Added the initial random values of parameters to output mcmc.txt file as step 0
+
 V4.4.2  2015-04-08
 
 L & G fixed bug in combining solutions from the walkers, which should help speed up convergence.
