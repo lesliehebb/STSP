@@ -3,8 +3,8 @@
 #include <math.h>
 #include <time.h>
 
-#define QUIET 0			//0 -> prints things, 1 -> only prints errors
-#define QUIETMCMC 0		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
+#define QUIET 1			//0 -> prints things, 1 -> only prints errors
+#define QUIETMCMC 1		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
 #define WHICHPRINTVIS 1		// what sort of visualization file to output (j-1,g-2)
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
@@ -4226,7 +4226,8 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 {
 	char goodparams,filename[128];
 	int i,j,k,r,msi,nparam,curstep,potstep,*updated,*naccepted,maxsteps;
-	long int memused,maxtime,time0,time1,avgtime;
+	long int memused; 
+    double maxtime,time0,time1,avgtime,elapsed_time,elapsed_time_at_next_step;
 	double **param[2],*chisq[2]; //param[0-1][chain number][parameter number]
 	double sqrtascale,oosqrtascale,smooascale,z,alpha,rn;
 	double bestchisq,*bestparam,torig;
@@ -4491,17 +4492,17 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 	else
 	{
 		maxsteps=TOOBIG;
-		maxtime=starttime-maxstepsortime;  //time limit is passed as negative
+		maxtime=-maxstepsortime;  //time limit is passed as negative
 #		if !QUIETMCMC && !QUIET
 			printf("start time: %li maxtime: %li   (%li)\n",starttime,maxtime,maxstepsortime*(-1));
 #		endif
 	}
-	avgtime=0;
+	if(maxtime||ALWAYSAVERAGETIME)
+		time0=timecheck();
 
 	for(msi=0;msi<maxsteps;msi++)	//the mcmc loop
 	{
-		if(maxtime||ALWAYSAVERAGETIME)
-			time0=timecheck();
+
 		j=0;
 		for(i=0;i<npop;i++)
 			j+=naccepted[i];
@@ -4642,8 +4643,11 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		if(maxtime||ALWAYSAVERAGETIME)
 		{
 			time1=timecheck();
-			avgtime=(avgtime*msi+time1-time0)/(msi+1);
-			if(maxtime&&time1+2*avgtime+300>maxtime)
+            elapsed_time = time1-time0;
+			avgtime=elapsed_time/(msi+1);
+            elapsed_time_at_next_step = avgtime + elapsed_time;
+
+			if(elapsed_time_at_next_step > maxtime)
 				maxsteps=0;			//make it stop, time is almost up
 		}
 	}			//end of main mcmc loop

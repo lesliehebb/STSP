@@ -3,6 +3,12 @@ STSP
 
 In and out of transit starspot modeling code
 
+V4.5.1 2015-12-07
+
+Refactoring the elapsed time calculation for timed runs. STSP runs can be timed by 
+setting the MCMC step number to a negative number, which will be interpreted as the
+negative of the maximum number of seconds to run the chains. 
+
 V4.5    2015-11-30
 
 Added the functionality for analyzing planets on eccentric orbits.
