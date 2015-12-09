@@ -4226,7 +4226,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 {
 	char goodparams,filename[128];
 	int i,j,k,r,msi,nparam,curstep,potstep,*updated,*naccepted,maxsteps;
-	long int memused; 
+	long int memused, run_time_buffer; 
 	double maxtime,time0,time1,avgtime,elapsed_time,elapsed_time_at_next_step;
 	double **param[2],*chisq[2]; //param[0-1][chain number][parameter number]
 	double sqrtascale,oosqrtascale,smooascale,z,alpha,rn;
@@ -4646,8 +4646,9 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 			elapsed_time = time1-time0;
 			avgtime=elapsed_time/(msi+1);
 			elapsed_time_at_next_step = avgtime + elapsed_time;
+            run_time_buffer = 300;
 
-			if(elapsed_time_at_next_step > maxtime)
+			if(elapsed_time_at_next_step > maxtime - run_time_buffer)
 				maxsteps=0;			//make it stop, time is almost up
 		}
 	}			//end of main mcmc loop
