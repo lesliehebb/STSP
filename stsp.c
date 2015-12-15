@@ -10,7 +10,7 @@
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "jtest.in"
+#define DEFAULTFILENAME "w229lcbest.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -65,6 +65,8 @@ unsigned int ttt[16]={1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,327
 #if DEBUGMCMC
 FILE *dbmcmc;
 #endif
+
+//FILE *debugellipse;
 
 typedef struct 
 {		//for ellipse-circle intersections
@@ -251,7 +253,7 @@ typedef struct
 	double thetaorbit,phiorbit;		//theta and phi of the orbital axis
 	double orbitangleomega;			//angle twixt line of nodes and semimajor axis (towards perastrion)
 	double tmiddleoftransit;		//t in planetpos fuction at which planet is in middle of eclipse, to match with t=0 of data
-	double xhat[3],yhat[3],zhat[3];	//unit vectors for orbital ellipse frame
+	double xhat[3],yhat[3];			//unit vectors for orbital ellipse frame
 	double lct0;					//at t=0, light curve time=lct0 (used for data) 
 	double x,y,z;						//coords at particular time
 }planetdata;
@@ -2285,6 +2287,8 @@ double planetfindeccentricanomaly(double ma,double e)
 		a=PI;
 		c=PIt2;
 	}
+	else
+		return PI;
 	for(i=0;i<16;i++)
 	{
 		b=(a+c)/2.0;
@@ -2303,6 +2307,10 @@ void planetposef(double t,planetdata planet[MAXPLANETS],double *x,double *y,int 
 	double xe,ye;
 	
 	ma=planet[whichplanet].omegaorbit*(t+planet[whichplanet].tmiddleoftransit);
+	while(ma>=PIt2)
+		ma-=PIt2;
+	while(ma<0.0)
+		ma+=PIt2;
 	ea=planetfindeccentricanomaly(ma,planet[whichplanet].eccentricity);
 	cosea=cos(ea);
 
@@ -2328,50 +2336,46 @@ void setplanetpos(double t,planetdata planet[MAXPLANETS],int whichplanet)
 	planet[whichplanet].y=xe*planet[whichplanet].xhat[1]+ye*planet[whichplanet].yhat[1];
 	planet[whichplanet].z=xe*planet[whichplanet].xhat[2]+ye*planet[whichplanet].yhat[2];
 }
-double planetfindmiddleoftransit(planetdata planet[MAXPLANETS],int whichplanet)
+void planetsetmiddleoftransit(planetdata planet[MAXPLANETS],int whichplanet)
 {
 	int i;
 	double bt[2],bd[2],mt,md;
 	double tmax,dt;
 
+	planet[whichplanet].tmiddleoftransit=0.0;
 	tmax=PIt2/planet[whichplanet].omegaorbit;
 	dt=tmax/64.0;
 
-	setplanetpos(0.0,planet,whichplanet);
-	bt[0]=0.0;
-	bd[0]=planet[whichplanet].y*planet[whichplanet].y+planet[whichplanet].z*planet[whichplanet].z;
-	setplanetpos(dt,planet,whichplanet);
-	bt[1]=dt;
-	bd[1]=planet[whichplanet].y*planet[whichplanet].y+planet[whichplanet].z*planet[whichplanet].z;
-	if(bd[1]<bd[0])
-	{
-		md=bd[0];
-		mt=bt[0];
-		bd[0]=bd[1];
-		bt[0]=bt[1];
-		bd[1]=md;
-		bt[1]=mt;
-	}
-	for(mt=2*dt;mt<tmax;mt+=dt)
+	bd[0]=TOOBIG;
+	bd[1]=TOOBIG;
+
+	for(mt=0;mt<tmax;mt+=dt)
 	{
 		setplanetpos(mt,planet,whichplanet);
-		md=planet[whichplanet].y*planet[whichplanet].y+planet[whichplanet].z*planet[whichplanet].z;
-		if(md<bd[1])
+		if(planet[whichplanet].x>0)
 		{
-			if(md<bd[0])
+			md=planet[whichplanet].y*planet[whichplanet].y+planet[whichplanet].z*planet[whichplanet].z;
+			if(md<bd[1])
 			{
-				bd[1]=bd[0];
-				bt[1]=bt[0];
-				bd[0]=md;
-				bt[0]=mt;
-			}
-			else
-			{
-				bd[1]=md;
-				bt[1]=mt;
+				if(md<bd[0])
+				{
+					bd[1]=bd[0];
+					bt[1]=bt[0];
+					bd[0]=md;
+					bt[0]=mt;
+				}
+				else
+				{
+					bd[1]=md;
+					bt[1]=mt;
+				}
 			}
 		}
 	}
+	if(bt[0]==0&&bt[1]>tmax-1.5*dt)
+		bt[0]=tmax;
+	if(bt[1]==0&&bt[0]>tmax-1.5*dt)
+		bt[1]=tmax;
 
 	for(i=0;i<64;i++)
 	{
@@ -2389,7 +2393,7 @@ double planetfindmiddleoftransit(planetdata planet[MAXPLANETS],int whichplanet)
 			bt[0]=mt;
 		}
 	}
-	return (bt[0]+bt[1])/2.0;
+	planet[whichplanet].tmiddleoftransit=(bt[0]+bt[1])/2.0;
 }
 double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS])
 {
@@ -2960,6 +2964,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 
 	for(i=0;i<numplanets;i++)
 	{
+		double cw90,sw90,st,ct,sf,cf,p;
 		planet[i].rsq*=star->rsq;
 		planet[i].r=sqrt(planet[i].rsq);
 		planet[i].area=PI*planet[i].rsq;
@@ -2967,7 +2972,20 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 #		if !QUIET
 			printf("planet %i orbit semimajor axis= %lf\n",i,planet[i].orbitsemimajor);
 #		endif
-		planet[i].tmiddleoftransit=planetfindmiddleoftransit(planet,i);
+		cw90=cos(planet[i].orbitangleomega-PIo2);
+		sw90=sin(planet[i].orbitangleomega-PIo2);
+		ct=cos(planet[i].thetaorbit);
+		st=sin(planet[i].thetaorbit);
+		cf=cos(planet[i].phiorbit);
+		sf=sin(planet[i].phiorbit);
+		p=sqrt(st*st*sf*sf+ct*ct);
+		planet[i].xhat[0]=cw90*p;
+		planet[i].xhat[1]=(sw90*ct-cw90*st*st*sf*cf)/p;
+		planet[i].xhat[2]=(-cw90*st*ct*cf-sw90*st*sf)/p;
+		planet[i].yhat[0]=(-sw90*p);
+		planet[i].yhat[1]=(sw90*st*st*sf*cf+cw90*ct)/p;
+		planet[i].yhat[2]=(sw90*st*ct*cf-cw90*st*sf)/p;
+		planetsetmiddleoftransit(planet,i);
 	}
 
 	if(filereads(str,datastr,&a,e)<0)
@@ -5205,7 +5223,6 @@ int main(int argc,char *argv[])
 	free((void *)lclight);
 	free((void *)lcuncertainty);
 #	if PRINTEACHSPOT
-	{
 		free((void *)spotreport);
 		free((void *)ldspotreport);
 #	endif
