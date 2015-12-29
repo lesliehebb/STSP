@@ -10,7 +10,7 @@
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "w229lcbest.in"
+#define DEFAULTFILENAME "c16lc.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -41,6 +41,7 @@
 #define ACCEPTABLEERROR (0.000001)
 
 #define DEBUGMCMC 0
+#define XYZDETAILS 1
 
 int NLDRINGS;				//number of rings for limb darkening
 char PRINTVIS;				//whether to print a vis file
@@ -64,6 +65,9 @@ unsigned int ttt[16]={1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,327
 
 #if DEBUGMCMC
 FILE *dbmcmc;
+#endif
+#if XYZDETAILS
+FILE *xyzdetail;
 #endif
 
 //FILE *debugellipse;
@@ -2335,6 +2339,9 @@ void setplanetpos(double t,planetdata planet[MAXPLANETS],int whichplanet)
 	planet[whichplanet].x=xe*planet[whichplanet].xhat[0]+ye*planet[whichplanet].yhat[0];
 	planet[whichplanet].y=xe*planet[whichplanet].xhat[1]+ye*planet[whichplanet].yhat[1];
 	planet[whichplanet].z=xe*planet[whichplanet].xhat[2]+ye*planet[whichplanet].yhat[2];
+#	if XYZDETAILS
+	 fprintf(xyzdetail,"%lf %lf %lf %lf\n",t,planet[whichplanet].x,planet[whichplanet].y,planet[whichplanet].z);
+#	endif
 }
 void planetsetmiddleoftransit(planetdata planet[MAXPLANETS],int whichplanet)
 {
@@ -2349,29 +2356,37 @@ void planetsetmiddleoftransit(planetdata planet[MAXPLANETS],int whichplanet)
 	bd[0]=TOOBIG;
 	bd[1]=TOOBIG;
 
-	for(mt=0;mt<tmax;mt+=dt)
+	while(bd[1]==TOOBIG)
 	{
-		setplanetpos(mt,planet,whichplanet);
-		if(planet[whichplanet].x>0)
+		bd[0]=TOOBIG;
+		bd[1]=TOOBIG;
+		for(mt=0;mt<tmax;mt+=dt)
 		{
-			md=planet[whichplanet].y*planet[whichplanet].y+planet[whichplanet].z*planet[whichplanet].z;
-			if(md<bd[1])
+			setplanetpos(mt,planet,whichplanet);
+			if(planet[whichplanet].x>0)
 			{
-				if(md<bd[0])
+				md=planet[whichplanet].y*planet[whichplanet].y+planet[whichplanet].z*planet[whichplanet].z;
+				if(md<bd[1])
 				{
-					bd[1]=bd[0];
-					bt[1]=bt[0];
-					bd[0]=md;
-					bt[0]=mt;
-				}
-				else
-				{
-					bd[1]=md;
-					bt[1]=mt;
+					if(md<bd[0])
+					{
+						bd[1]=bd[0];
+						bt[1]=bt[0];
+						bd[0]=md;
+						bt[0]=mt;
+					}
+					else
+					{
+						bd[1]=md;
+						bt[1]=mt;
+					}
 				}
 			}
 		}
+		dt=dt/2.0;
 	}
+
+
 	if(bt[0]==0&&bt[1]>tmax-1.5*dt)
 		bt[0]=tmax;
 	if(bt[1]==0&&bt[0]>tmax-1.5*dt)
@@ -2428,6 +2443,7 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 							fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 3\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
 						else
 							fprintf(outv,"c\n%g %g %g 3\n",planet[i].y,planet[i].z,planet[i].r);
+							
 #				endif
 			}
 #			if ANYPRINTVIS
@@ -2436,6 +2452,7 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 						fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
 					else
 						fprintf(outv,"c\n%g %g %g 10\n",planet[i].y,planet[i].z,planet[i].r);
+						
 #			endif
 		}
 	}
@@ -2859,11 +2876,19 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			planet[i].orbitangleomega=PIo2;
 			planet[i].eccentricity=0;
 		}
+		else if(x[7]==0)
+		{
+			planet[i].orbitangleomega=PIo2;
+			planet[i].eccentricity=x[8];
+		}
 		else
 		{
 			planet[i].orbitangleomega=atan2(x[8],x[7]);
 			planet[i].eccentricity=x[7]/cos(planet[i].orbitangleomega);
 		}
+		planet[i].orbitangleomega+=PIo2;	//because 90 degrees is star at far focus, not near focus 
+		if(planet[i].orbitangleomega>=PIt2)
+			planet[i].orbitangleomega-=PIt2;
 
 #		if !QUIET
 			printf("planet %i\n orbit theta= %0.9lf (%lf degrees)\n orbit phi= %0.9lf (%lf degrees)\n",i,planet[i].thetaorbit,planet[i].thetaorbit*180.0/PI,planet[i].phiorbit,planet[i].phiorbit*180/PI);
@@ -5053,7 +5078,10 @@ int main(int argc,char *argv[])
 		sprintf(dbfn,"%s_dbmcmc.txt",rootname);
 		dbmcmc=fopen(dbfn,"w");
 #	endif
-
+#	if XYZDETAILS
+		xyzdetail=fopen("xyzdetail.txt","w");
+#	endif
+		
 	readparam=(double *)malloc(MAXSPOTS*3*sizeof(double));
 	if(readparam==NULL) 
 	{
@@ -5228,6 +5256,9 @@ int main(int argc,char *argv[])
 #	endif
 #	if DEBUGMCMC
 		fclose(dbmcmc);
+#	endif
+#	if XYZDETAILS
+		fclose(xyzdetail);
 #	endif
 
 	return 0;
