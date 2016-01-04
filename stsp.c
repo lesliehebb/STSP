@@ -2886,7 +2886,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			planet[i].orbitangleomega=atan2(x[8],x[7]);
 			planet[i].eccentricity=x[7]/cos(planet[i].orbitangleomega);
 		}
-		planet[i].orbitangleomega+=PIo2;	//because 90 degrees is star at far focus, not near focus 
+		planet[i].orbitangleomega+=PI;  //not PIo2;	//because 90 degrees is star at far focus, not near focus 
 		if(planet[i].orbitangleomega>=PIt2)
 			planet[i].orbitangleomega-=PIt2;
 
