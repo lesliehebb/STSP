@@ -2886,9 +2886,9 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			planet[i].orbitangleomega=atan2(x[8],x[7]);
 			planet[i].eccentricity=x[7]/cos(planet[i].orbitangleomega);
 		}
-		planet[i].orbitangleomega+=PI;  //not PIo2;	//because 90 degrees is star at far focus, not near focus 
-		if(planet[i].orbitangleomega>=PIt2)
-			planet[i].orbitangleomega-=PIt2;
+		//planet[i].orbitangleomega+=PI;  //not PIo2;	//because 90 degrees is star at near focus, no +PI 
+		//if(planet[i].orbitangleomega>=PIt2)
+		//	planet[i].orbitangleomega-=PIt2;
 
 #		if !QUIET
 			printf("planet %i\n orbit theta= %0.9lf (%lf degrees)\n orbit phi= %0.9lf (%lf degrees)\n",i,planet[i].thetaorbit,planet[i].thetaorbit*180.0/PI,planet[i].phiorbit,planet[i].phiorbit*180/PI);
