@@ -35,4 +35,9 @@ rather than the commonly fit quadratic limb-darkening parameters:
 
 If you've fit for (u1, u2) and need to transform into the non-linear parameters, use the following transformation: 
 
-`c4 = -u2;   c2 = u_1 + 2*u_2`
+```
+c_1 = 0
+c_2 = u_1 + 2*u_2
+c_3 = 0
+c_4 = -u_2
+```
