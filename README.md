@@ -3,6 +3,13 @@ STSP
 
 In and out of transit starspot modeling code
 
+V4.5    2015-11-30
+
+Added the functionality for analyzing planets on eccentric orbits.
+The input file has not changed and requires input of ecosw and esinw
+which are the orthogal observable quantities.  The program should
+calculate the orbit of the planet based on the new orbital parameters.
+
 V4.4.3  2015-07-15
 
 Added a #define to use latitude and R * sin(latitute) as the parameters of interest instead of R and latitude (R=radius of spot)

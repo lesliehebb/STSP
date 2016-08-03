@@ -10,7 +10,7 @@
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "jtest.in"
+#define DEFAULTFILENAME "c16lc.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -28,7 +28,7 @@
 #define TWICEMAXSPOTSMAXPLANETS 20
 #define FOURMAXSPOTSMAXPLANETS 40
 
-#define MAXNLDRINGS 100
+#define MAXNLDRINGS 1000
 
 #define RND (((double)rand())/(double)RAND_MAX)
 #define PIo2 1.5707963267948966192313216916398
@@ -41,6 +41,7 @@
 #define ACCEPTABLEERROR (0.000001)
 
 #define DEBUGMCMC 0
+#define XYZDETAILS 1
 
 int NLDRINGS;				//number of rings for limb darkening
 char PRINTVIS;				//whether to print a vis file
@@ -65,6 +66,11 @@ unsigned int ttt[16]={1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,327
 #if DEBUGMCMC
 FILE *dbmcmc;
 #endif
+#if XYZDETAILS
+FILE *xyzdetail;
+#endif
+
+//FILE *debugellipse;
 
 typedef struct 
 {		//for ellipse-circle intersections
@@ -243,16 +249,19 @@ typedef struct
 typedef struct 
 {
 	double r;
-	double rsq;  //radius squared
+	double rsq;					//radius squared
 	double area;
-	double omegaorbit;
-	double rorbit;
-	double thetaorbit,phiorbit;  //theta and phi of the orbital axis
-	double omegat0;  //value of omegaorbit*time at which planet is on y-axis, to make planet on y-axis at t=0
-	double orbitcoeff[5];	//for finding y,z at time t
-	double lct0;		//at t=0, light curve time=lct0 (used for data) 
-	double y,z;  //coords at particular time
+	double omegaorbit;			//angular speed of orbit rad/s
+	double orbitsemimajor;		//semimajor axis length
+	double eccentricity;	
+	double thetaorbit,phiorbit;		//theta and phi of the orbital axis
+	double orbitangleomega;			//angle twixt line of nodes and semimajor axis (towards perastrion)
+	double tmiddleoftransit;		//t in planetpos fuction at which planet is in middle of eclipse, to match with t=0 of data
+	double xhat[3],yhat[3];			//unit vectors for orbital ellipse frame
+	double lct0;					//at t=0, light curve time=lct0 (used for data) 
+	double x,y,z;						//coords at particular time
 }planetdata;
+
 
 long int timecheck(void)
 {
@@ -2268,10 +2277,143 @@ double fixldstararea(stardata *star,int ringi)
 
 	return (area0+area1)/2.0;
 }
+double planetfindeccentricanomaly(double ma,double e)
+{
+	int i;
+	double a,b,c;
+	if(ma<PI)
+	{
+		a=0;
+		c=PI;
+	}
+	else if(ma>PI)
+	{
+		a=PI;
+		c=PIt2;
+	}
+	else
+		return PI;
+	for(i=0;i<16;i++)
+	{
+		b=(a+c)/2.0;
+		if(b-e*sin(b)>ma)
+			c=b;
+		else
+			a=b;
+	}
+	return (a+c)/2.0;
+}
+void planetposef(double t,planetdata planet[MAXPLANETS],double *x,double *y,int whichplanet)
+{
+	//planet's position in ellipse-of-orbit frame, x-axis is semimajor, origin at star, +x towards perastrion
+	double ma,ea,cosea,costh;
+	double theta,r;
+	double xe,ye;
+	
+	ma=planet[whichplanet].omegaorbit*(t+planet[whichplanet].tmiddleoftransit);
+	while(ma>=PIt2)
+		ma-=PIt2;
+	while(ma<0.0)
+		ma+=PIt2;
+	ea=planetfindeccentricanomaly(ma,planet[whichplanet].eccentricity);
+	cosea=cos(ea);
+
+	r=planet[whichplanet].orbitsemimajor*(1.0-planet[whichplanet].eccentricity*cosea);
+	costh=(cosea-planet[whichplanet].eccentricity)/(1.0-planet[whichplanet].eccentricity*cosea);
+	theta=acos(costh);
+
+	xe=r*costh;
+	ye=r*sin(theta);
+	if(ma>PI) 
+		ye=(-ye);
+
+	(*x)=xe;
+	(*y)=ye;
+
+}
+void setplanetpos(double t,planetdata planet[MAXPLANETS],int whichplanet)
+{
+	double xe,ye;
+
+	planetposef(t,planet,&xe,&ye,whichplanet);
+	planet[whichplanet].x=xe*planet[whichplanet].xhat[0]+ye*planet[whichplanet].yhat[0];
+	planet[whichplanet].y=xe*planet[whichplanet].xhat[1]+ye*planet[whichplanet].yhat[1];
+	planet[whichplanet].z=xe*planet[whichplanet].xhat[2]+ye*planet[whichplanet].yhat[2];
+#	if XYZDETAILS
+	 fprintf(xyzdetail,"%lf %lf %lf %lf\n",t,planet[whichplanet].x,planet[whichplanet].y,planet[whichplanet].z);
+#	endif
+}
+void planetsetmiddleoftransit(planetdata planet[MAXPLANETS],int whichplanet)
+{
+	int i;
+	double bt[2],bd[2],mt,md;
+	double tmax,dt;
+
+	planet[whichplanet].tmiddleoftransit=0.0;
+	tmax=PIt2/planet[whichplanet].omegaorbit;
+	dt=tmax/64.0;
+
+	bd[0]=TOOBIG;
+	bd[1]=TOOBIG;
+
+	while(bd[1]==TOOBIG)
+	{
+		bd[0]=TOOBIG;
+		bd[1]=TOOBIG;
+		for(mt=0;mt<tmax;mt+=dt)
+		{
+			setplanetpos(mt,planet,whichplanet);
+			if(planet[whichplanet].x>0)
+			{
+				md=planet[whichplanet].y*planet[whichplanet].y+planet[whichplanet].z*planet[whichplanet].z;
+				if(md<bd[1])
+				{
+					if(md<bd[0])
+					{
+						bd[1]=bd[0];
+						bt[1]=bt[0];
+						bd[0]=md;
+						bt[0]=mt;
+					}
+					else
+					{
+						bd[1]=md;
+						bt[1]=mt;
+					}
+				}
+			}
+		}
+		dt=dt/2.0;
+	}
+
+
+	if(bt[0]==0&&bt[1]>tmax-1.5*dt)
+		bt[0]=tmax;
+	if(bt[1]==0&&bt[0]>tmax-1.5*dt)
+		bt[1]=tmax;
+
+	for(i=0;i<64;i++)
+	{
+		mt=(bt[0]+bt[1])/2.0;
+		setplanetpos(mt,planet,whichplanet);
+		md=planet[whichplanet].y*planet[whichplanet].y+planet[whichplanet].z*planet[whichplanet].z;
+		if(bd[0]<bd[1])
+		{
+			bd[1]=md;
+			bt[1]=mt;
+		}
+		else
+		{
+			bd[0]=md;
+			bt[0]=mt;
+		}
+	}
+	planet[whichplanet].tmiddleoftransit=(bt[0]+bt[1])/2.0;
+}
 double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS])
 {
 	int i,j,realnumplanets;
-	double totlight,morelight,planetsin,planetcos,torig,thelightness,noplanetlightness;
+	double totlight,morelight,torig,thelightness,noplanetlightness;
 
 	torig=t/86400.0+planet->lct0;
 #	if ANYPRINTVIS
@@ -2289,26 +2431,9 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 
 	for(i=0;i<numplanets;i++)
 	{
-		planetsin=sin(planet[i].omegaorbit*t+planet[i].omegat0);
-		planetcos=cos(planet[i].omegaorbit*t+planet[i].omegat0);
-		if(planet[i].orbitcoeff[0]*planetcos+planet[i].orbitcoeff[1]*planetsin<0)
-		{	//planet is 'behind' the star (x is negative)
-#			if ANYPRINTVIS
-				if(PRINTVIS)
-				{
-					planet[i].y=planet[i].orbitcoeff[2]*planetcos+planet[i].orbitcoeff[3]*planetsin;  
-					planet[i].z=planet[i].orbitcoeff[4]*planetcos;
-					if(PRINTVIS==1)
-						fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
-					else
-						fprintf(outv,"c\n%g %g %g 10\n",planet[i].y,planet[i].z,planet[i].r);
-				}
-#			endif
-		}
-		else
+		setplanetpos(t,planet,i);
+		if(planet[i].x>0)	//planet is in front of star
 		{
-			planet[i].y=planet[i].orbitcoeff[2]*planetcos+planet[i].orbitcoeff[3]*planetsin;
-			planet[i].z=planet[i].orbitcoeff[4]*planetcos;
 			if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
 			{
 				createcircle(planet[i],star->r,star->rsq);
@@ -2318,6 +2443,7 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 							fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 3\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
 						else
 							fprintf(outv,"c\n%g %g %g 3\n",planet[i].y,planet[i].z,planet[i].r);
+							
 #				endif
 			}
 #			if ANYPRINTVIS
@@ -2326,6 +2452,7 @@ double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata 
 						fprintf(outv,"%.9lf %10.6lf %10.6lf %10.6lf %10.6lf 10\n",torig,planet[i].y,planet[i].z,planet[i].r,planet[i].r);
 					else
 						fprintf(outv,"c\n%g %g %g 10\n",planet[i].y,planet[i].z,planet[i].r);
+						
 #			endif
 		}
 	}
@@ -2744,8 +2871,28 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			planet[i].thetaorbit*=(-1.0);
 		if(planet[i].phiorbit<0)
 			planet[i].phiorbit+=PIt2;
+		if(x[7]==0&&x[8]==0)
+		{
+			planet[i].orbitangleomega=PIo2;
+			planet[i].eccentricity=0;
+		}
+		else if(x[7]==0)
+		{
+			planet[i].orbitangleomega=PIo2;
+			planet[i].eccentricity=x[8];
+		}
+		else
+		{
+			planet[i].orbitangleomega=atan2(x[8],x[7]);
+			planet[i].eccentricity=x[7]/cos(planet[i].orbitangleomega);
+		}
+		//planet[i].orbitangleomega+=PI;  //not PIo2;	//because 90 degrees is star at near focus, no +PI 
+		//if(planet[i].orbitangleomega>=PIt2)
+		//	planet[i].orbitangleomega-=PIt2;
+
 #		if !QUIET
 			printf("planet %i\n orbit theta= %0.9lf (%lf degrees)\n orbit phi= %0.9lf (%lf degrees)\n",i,planet[i].thetaorbit,planet[i].thetaorbit*180.0/PI,planet[i].phiorbit,planet[i].phiorbit*180/PI);
+			printf(" eccentricity= %lf\n orbit angle omega= %lf (%lf degrees)\n",planet[i].eccentricity,planet[i].orbitangleomega,planet[i].orbitangleomega*180.0/PI);
 #		endif
 /*		planet[i].thetaorbit=90.0-x[5];
 		if(planet[i].thetaorbit<0)
@@ -2842,20 +2989,28 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 
 	for(i=0;i<numplanets;i++)
 	{
+		double cw90,sw90,st,ct,sf,cf,p;
 		planet[i].rsq*=star->rsq;
 		planet[i].r=sqrt(planet[i].rsq);
 		planet[i].area=PI*planet[i].rsq;
-		planet[i].rorbit=pow(ppdays/365.24218967,2.0/3.0)*pow(stardensity,1.0/3.0)*214.939469384;
+		planet[i].orbitsemimajor=pow(ppdays/365.24218967,2.0/3.0)*pow(stardensity,1.0/3.0)*214.939469384;
 #		if !QUIET
-			printf("planet %i Rorbit= %lf\n",i,planet[i].rorbit);
+			printf("planet %i orbit semimajor axis= %lf\n",i,planet[i].orbitsemimajor);
 #		endif
-		planet[i].omegat0=atan(-sin(planet[i].phiorbit)*cos(planet[i].thetaorbit)/cos(planet[i].phiorbit));
-		if(planet[i].omegat0<0) planet[i].omegat0+=PIt2;
-		planet[i].orbitcoeff[0]=planet[i].rorbit*cos(planet[i].phiorbit)*cos(planet[i].thetaorbit);
-		planet[i].orbitcoeff[1]=(-planet[i].rorbit*sin(planet[i].phiorbit));
-		planet[i].orbitcoeff[2]=planet[i].rorbit*sin(planet[i].phiorbit)*cos(planet[i].thetaorbit);
-		planet[i].orbitcoeff[3]=planet[i].rorbit*cos(planet[i].phiorbit);
-		planet[i].orbitcoeff[4]=(-planet[i].rorbit*sin(planet[i].thetaorbit));
+		cw90=cos(planet[i].orbitangleomega-PIo2);
+		sw90=sin(planet[i].orbitangleomega-PIo2);
+		ct=cos(planet[i].thetaorbit);
+		st=sin(planet[i].thetaorbit);
+		cf=cos(planet[i].phiorbit);
+		sf=sin(planet[i].phiorbit);
+		p=sqrt(st*st*sf*sf+ct*ct);
+		planet[i].xhat[0]=cw90*p;
+		planet[i].xhat[1]=(sw90*ct-cw90*st*st*sf*cf)/p;
+		planet[i].xhat[2]=(-cw90*st*ct*cf-sw90*st*sf)/p;
+		planet[i].yhat[0]=(-sw90*p);
+		planet[i].yhat[1]=(sw90*st*st*sf*cf+cw90*ct)/p;
+		planet[i].yhat[2]=(sw90*st*ct*cf-cw90*st*sf)/p;
+		planetsetmiddleoftransit(planet,i);
 	}
 
 	if(filereads(str,datastr,&a,e)<0)
@@ -3147,7 +3302,7 @@ int initializelcdata(char filename[64],double lcstarttime,double lcfinishtime,in
 void initializeprecalcplanet(stardata *star,planetdata planet[MAXPLANETS],int lcn,double lctime[])
 {
 	int i,timeindex;
-	double planetsin,planetcos,torig;
+	double torig;
 
 	for(timeindex=0;timeindex<lcn;timeindex++)
 	{
@@ -3156,15 +3311,9 @@ void initializeprecalcplanet(stardata *star,planetdata planet[MAXPLANETS],int lc
 
 		for(i=0;i<numplanets;i++)
 		{
-			planetsin=sin(planet[i].omegaorbit*lctime[timeindex]+planet[i].omegat0);
-			planetcos=cos(planet[i].omegaorbit*lctime[timeindex]+planet[i].omegat0);
-			if(planet[i].orbitcoeff[0]*planetcos+planet[i].orbitcoeff[1]*planetsin<0)
-			{	//planet is 'behind' the star (x is negative)
-			}
-			else
+			setplanetpos(lctime[timeindex],planet,i);
+			if(planet[i].x>0)
 			{
-				planet[i].y=planet[i].orbitcoeff[2]*planetcos+planet[i].orbitcoeff[3]*planetsin;
-				planet[i].z=planet[i].orbitcoeff[4]*planetcos;
 				if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
 				{
 					createcircle(planet[i],star->r,star->rsq);
@@ -4929,7 +5078,10 @@ int main(int argc,char *argv[])
 		sprintf(dbfn,"%s_dbmcmc.txt",rootname);
 		dbmcmc=fopen(dbfn,"w");
 #	endif
-
+#	if XYZDETAILS
+		xyzdetail=fopen("xyzdetail.txt","w");
+#	endif
+		
 	readparam=(double *)malloc(MAXSPOTS*3*sizeof(double));
 	if(readparam==NULL) 
 	{
@@ -5099,12 +5251,14 @@ int main(int argc,char *argv[])
 	free((void *)lclight);
 	free((void *)lcuncertainty);
 #	if PRINTEACHSPOT
-	{
 		free((void *)spotreport);
 		free((void *)ldspotreport);
 #	endif
 #	if DEBUGMCMC
 		fclose(dbmcmc);
+#	endif
+#	if XYZDETAILS
+		fclose(xyzdetail);
 #	endif
 
 	return 0;
