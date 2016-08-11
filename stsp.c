@@ -2886,7 +2886,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			planet[i].orbitangleomega=atan2(x[8],x[7]);
 			planet[i].eccentricity=x[7]/cos(planet[i].orbitangleomega);
 		}
-		//planet[i].orbitangleomega+=PI;  //not PIo2;	//because 90 degrees is star at near focus, no +PI 
+		//planet[i].orbitangleomega+=PI;  //not PIo2;	//because 90 degrees is star at far focus, not near focus 
 		//if(planet[i].orbitangleomega>=PIt2)
 		//	planet[i].orbitangleomega-=PIt2;
 
@@ -3538,6 +3538,8 @@ double modelmaxlight(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[
 	numplanets=realnumplanets;
 	PRINTVIS=realprintvis;
 //	fclose(debugmml);
+	if(localmaxl[0]==0.0&&localmaxl[1]==0.0&&localmaxind[0]==(-1)&&localmaxind[1]==(-1))
+		return light[0];	//all light[] values are the same
 	if(localmaxl[0]>localmaxl[1])
 		return localmaxl[0];
 	else
