@@ -39,7 +39,7 @@
 #define TOOBIG (1000000000)
 #define TOOSMALL (-1000000000)
 #define ACCEPTABLEERROR (0.000001)
-#define ORDERSPOTNEARNESS (0.1745)
+#define ORDERSPOTNEARNESS (0.1745)		//10 degrees = 0.1745.  If spots are closer than this, then they order by the other coordinate.
 
 #define DEBUGMCMC 0
 #define XYZDETAILS 1
