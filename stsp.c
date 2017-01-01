@@ -3,16 +3,16 @@
 #include <math.h>
 #include <time.h>
 
-#define QUIET 0			//0 -> prints things, 1 -> only prints errors
-#define QUIETMCMC 0		//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
+#define QUIET 0				//0 -> prints things, 1 -> only prints errors
+#define QUIETMCMC 0			//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define ALWAYSPRINTVIS 0
 #define WHICHPRINTVIS 1		// what sort of visualization file to output (j-1,g-2)
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "c16lc.in"
+#define DEFAULTFILENAME "window229guess.in"
 
-#define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
+#define ORDERSPOTSMETHOD 0			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
 #define MCMCTRACKMEM 1000000		//0 -> write mcmc tracker info to file, N -> buffer N outputs before writing
 #define PRECALCPLANET 1				//1 -> optimize by precalculating planet effect at each time
@@ -23,10 +23,10 @@
 #define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
 #define PRINTPLANETSPOTOVERLAP 1	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
 
-#define MAXSPOTS 10
+#define MAXSPOTS 100
 #define MAXPLANETS 1
-#define TWICEMAXSPOTSMAXPLANETS 20
-#define FOURMAXSPOTSMAXPLANETS 40
+#define TWICEMAXSPOTSMAXPLANETS 200
+#define FOURMAXSPOTSMAXPLANETS 400
 
 #define MAXNLDRINGS 1000
 
@@ -39,6 +39,7 @@
 #define TOOBIG (1000000000)
 #define TOOSMALL (-1000000000)
 #define ACCEPTABLEERROR (0.000001)
+#define ORDERSPOTNEARNESS (0.1745)
 
 #define DEBUGMCMC 0
 #define XYZDETAILS 1
@@ -513,7 +514,7 @@ double areacirclesection2(double r,double ang0,double ang1)
 	}
 }
 double areaellipsesection(double a,double b,double ang0,double ang1)
-{	//	area of an elliptical section major axis a (along v hat) minor axis b (along w hat),
+{	//	area of an elliptical section, major axis a (along v hat) minor axis b (along w hat),
 	//	from angle ang0 to ang1 (tangent (v-hat) is ang=0)
 	double f,v,w,cang0,cang1,ep;
 	if(b<0)
@@ -2886,9 +2887,9 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			planet[i].orbitangleomega=atan2(x[8],x[7]);
 			planet[i].eccentricity=x[7]/cos(planet[i].orbitangleomega);
 		}
-		//planet[i].orbitangleomega+=PI;  //not PIo2;	//because 90 degrees is star at far focus, not near focus 
-		//if(planet[i].orbitangleomega>=PIt2)
-		//	planet[i].orbitangleomega-=PIt2;
+//		planet[i].orbitangleomega+=PI;  //not PIo2;	//because 90 degrees is star at far focus, not near focus 
+//		if(planet[i].orbitangleomega>=PIt2)
+//			planet[i].orbitangleomega-=PIt2;	perhaps we thought better of this?
 
 #		if !QUIET
 			printf("planet %i\n orbit theta= %0.9lf (%lf degrees)\n orbit phi= %0.9lf (%lf degrees)\n",i,planet[i].thetaorbit,planet[i].thetaorbit*180.0/PI,planet[i].phiorbit,planet[i].phiorbit*180/PI);
@@ -3021,7 +3022,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	if(filereads(str,datastr,&a,e)<0)
 		return -17;
 
-	if(str[0]!='L'&&str[0]!='l'&&str[0]!='H'&&str[0]!='h'&&str[0]!='S'&&str[0]!='s'&&str[0]!='D'&&str[0]!='d'&&str[0]!='T'&&str[0]!='t'&&str[0]!='x'&&str[0]!='X'&&str[0]!='f'&&str[0]!='F'&&str[0]!='p'&&str[0]!='P'&&str[0]!='u'&&str[0]!='U')
+	if(str[0]!='L'&&str[0]!='l'&&str[0]!='H'&&str[0]!='h'&&str[0]!='S'&&str[0]!='s'&&str[0]!='D'&&str[0]!='d'&&str[0]!='T'&&str[0]!='t'&&str[0]!='x'&&str[0]!='X'&&str[0]!='f'&&str[0]!='F'&&str[0]!='p'&&str[0]!='P'&&str[0]!='u'&&str[0]!='U'&&str[0]!='I'&&str[0]!='i')
 		i=0;  //unseeded mcmc
 	else if(str[0]=='l')
 		i=1;	//generate light curve and vis file from parameters
@@ -3053,6 +3054,8 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		i=9;	//plot chi squared over variation of one spot
 	else if(str[0]=='u'||str[0]=='U')
 		i=10;	//partially seeded mcmc
+	else if(str[0]=='I'||str[0]=='i')
+		i=11;
 	else if(str[0]=='x')
 		i=100;	//x
 	else
@@ -3170,6 +3173,13 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		*randomseed=(int)x[0]; //using randomseed to hold number of spot to vary
 		if(filereadd(numspots*3+1,readparam,datastr,&a,e)<0)
 			return -29;
+	}
+	else if(i==11)
+	{
+		if(filereads(seedfilename,datastr,&a,e)<0)
+			return -30;
+		printf("time file: %s\n",seedfilename);
+
 	}
 	return i;
 }
@@ -3776,9 +3786,9 @@ int orderspots(double param[])
 		j=numseeded;  
 		while(j<numspots-1)
 		{
-			if(param[j*3+of0]<param[j*3+of0+3]-0.1745)
+			if(param[j*3+of0]<param[j*3+of0+3]-ORDERSPOTNEARNESS)
 				j++;
-			else if((param[j*3+of0]<param[j*3+of0+3]+0.1745)&&(param[j*3+of1]<param[j*3+of1+3]))
+			else if((param[j*3+of0]<param[j*3+of0+3]+ORDERSPOTNEARNESS)&&(param[j*3+of1]<param[j*3+of1+3]))
 				j++;
 			else
 			{
@@ -4845,6 +4855,69 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 	}
 	fclose(lcout);
 }
+void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,char infilename[128])
+{
+	char outfilename[128];
+	FILE *in,*out;
+	int i,j;
+	double tday,t,theta,phi;
+	double r[3],xhat[3],zhat[3],dp;
+
+	in=fopen(infilename,"r");
+
+	j=4;
+	for(i=0;i<128;i++)
+		if(infilename[i]=='\0')
+		{
+			j=i;
+			i=128;
+		}
+	if(infilename[j-4]=='.'&&infilename[j-3]=='t'&&infilename[j-2]=='x'&&infilename[j-1]=='t')
+		infilename[j-4]='\0';
+	sprintf(outfilename,"%s_guess.txt",infilename);
+	out=fopen(outfilename,"w");
+
+	zhat[0]=sin(star->theta);
+	zhat[1]=0.0;
+	zhat[2]=cos(star->theta);
+
+	while(!feof(in))
+	{
+		fscanf(in,"%lf",&tday);
+		t=(tday-planet[0].lct0)*86400.0;
+
+		star->phi=star->omega*t;
+		xhat[0]=cos(star->theta)*cos(star->phi);
+		xhat[1]=sin(star->phi);
+		xhat[2]=(-1.0)*sin(star->theta)*cos(star->phi);
+
+		fprintf(out,"%0.9lf ",tday);
+		for(i=0;i<numplanets;i++)
+		{
+			setplanetpos(t,planet,i);
+			if(planet[i].x>0)	//planet is in front of star
+			{
+				if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
+				{
+					r[0]=sqrt(star->rsq-planet[i].y*planet[i].y+planet[i].z*planet[i].z)/star->r;
+					r[1]=planet[i].y/star->r;
+					r[2]=planet[i].z/star->r;
+					dp=r[0]*zhat[0]+r[1]*zhat[1]+r[2]*zhat[2];
+					theta=acos(dp);
+					dp=r[0]*xhat[0]+r[1]*xhat[1]+r[2]*xhat[2];
+					phi=acos(dp/sin(theta));
+					fprintf(out,"%0.9lf %0.9lf\n",theta,phi);
+				}
+				else
+					fprintf(out,"planet center not over star\n");
+			}
+			else
+				fprintf(out,"planet behind star\n");
+		}
+	}
+	fclose(in);
+	fclose(out);
+}
 void debuglc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[])
 {
 	int i;
@@ -5237,6 +5310,10 @@ int main(int argc,char *argv[])
 	{
 		printf("starting plot data for one spot variation\n");
 		plotdata(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,randomseed,readparam,rootname);
+	}
+	else if(j==11)
+	{
+		initialguess(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,seedfilename);
 	}
 	else if(j==100)
 	{
