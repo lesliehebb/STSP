@@ -10,7 +10,7 @@
 #define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "window229guess.in"
+#define DEFAULTFILENAME "window063_area.in"
 
 #define ORDERSPOTSMETHOD 0			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -18,17 +18,18 @@
 #define PRECALCPLANET 1				//1 -> optimize by precalculating planet effect at each time
 #define COMBINEONESPOT	0			//whether to combine one spot at a time or a whole chain (should be 0)
 #define COMBINERSINTHETA 0			//whether to use r or r*sin(theta) as the combination variable
+#define USEOLDLDRING 1				//whether to use the old uniformly spaced limb darkening ring system
 
 #define ALWAYSAVERAGETIME 0			//whether to average time when using maxsteps (in mcmc)
 #define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
-#define PRINTPLANETSPOTOVERLAP 1	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
+#define PRINTPLANETSPOTOVERLAP 0	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
 
-#define MAXSPOTS 100
+#define MAXSPOTS 10
 #define MAXPLANETS 1
-#define TWICEMAXSPOTSMAXPLANETS 200
-#define FOURMAXSPOTSMAXPLANETS 400
+#define TWICEMAXSPOTSMAXPLANETS 20
+#define FOURMAXSPOTSMAXPLANETS 40
 
-#define MAXNLDRINGS 1000
+#define MAXNLDRINGS 100
 
 #define RND (((double)rand())/(double)RAND_MAX)
 #define PIo2 1.5707963267948966192313216916398
@@ -39,7 +40,7 @@
 #define TOOBIG (1000000000)
 #define TOOSMALL (-1000000000)
 #define ACCEPTABLEERROR (0.000001)
-#define ORDERSPOTNEARNESS (0.1745)		//10 degrees = 0.1745.  If spots are closer than this, then they order by the other coordinate.
+#define ORDERSPOTNEARNESS (0.1745)
 
 #define DEBUGMCMC 0
 #define XYZDETAILS 1
@@ -480,7 +481,7 @@ int ellipsestarintersection(double r,double dcen,double a,double b,double v[2],d
 	return k;
 }
 double areacirclesection(double r,double dang)
-{	//area of a circular section radius r, from angle ang0 to ang1 (tangent (v hat) is ang=0)
+{	//area of a circular section radius r, from angle ang0 to ang1 (tangent (v hat) is ang=0) -bordered by arc and chord (not a sector)
 	double alpha,halfchord;
 	alpha=dang/2.0;
 	if(alpha>PIo2)
@@ -2411,6 +2412,7 @@ void planetsetmiddleoftransit(planetdata planet[MAXPLANETS],int whichplanet)
 	}
 	planet[whichplanet].tmiddleoftransit=(bt[0]+bt[1])/2.0;
 }
+
 double lightness(double t,stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS])
 {
 	int i,j,realnumplanets;
@@ -2655,6 +2657,139 @@ double ldintensity(double r,double lda[5])
 	mu=sqrt(1-r*r);
 	return 1-lda[1]*(1-sqrt(mu))-lda[2]*(1-mu)-lda[3]*(1-pow(mu,1.5))-lda[4]*(1-mu*mu);
 }
+double ldradiusfromintensity(double intensity,double lda[5])
+{
+	int count=0;
+	double minr=0.0,maxr=1.0,iatmin,iatmax;
+	double midr,iatmid,di;
+	double rfitollerance=0.0001;
+
+	iatmin=ldintensity(minr,lda);
+	iatmax=ldintensity(maxr,lda);
+	di=100;
+
+	if(iatmin<intensity||iatmax>intensity)
+		return -1.0;
+
+	while(di>rfitollerance)
+	{
+		count++;
+		midr=(minr+maxr)/2.0;
+		iatmid=ldintensity(midr,lda);
+		if(iatmid>intensity)
+		{
+			minr=midr;
+			di=iatmid-intensity;
+		}
+		else
+		{
+			maxr=midr;
+			di=intensity-iatmid;
+		}
+		if(count>100000000)
+			di=0;
+	}
+
+	return midr;
+}
+double ldmaxintensity(double lda[5])
+{
+	int i;
+	double rmin,rmid,rmax,imin,imid,imax;
+
+	imin=0.0;
+	imax=0.0;
+	rmax=0.0;
+	for(rmid=0.0;rmid<=1.0;rmid+=0.001)
+	{
+		imid=ldintensity(rmid,lda);
+		if(imid>imin)
+			if(imid>imax)
+			{
+				rmin=rmax;
+				imin=imax;
+				rmax=rmid;
+				imax=imid;
+			}
+			else
+			{
+				rmin=rmid;
+				imin=imid;
+			}
+	}
+
+	if(rmin>rmax)
+	{
+		rmid=rmin;
+		rmin=rmax;
+		rmax=rmid;
+	}
+	imin=ldintensity(rmin,lda);
+	imax=ldintensity(rmax,lda);
+	for(i=0;i<100;i++)
+	{
+		rmid=(rmin+rmax)/2.0;
+		if(imin>imax)
+		{
+			rmax=rmid;
+			imax=ldintensity(rmax,lda);
+		}
+		else if(imin<imax)
+		{
+			rmin=rmid;
+			imin=ldintensity(rmin,lda);
+		}
+		else
+		{
+			i=100;
+		}
+	}
+
+	if(imax>imin)
+		return imax;
+	else
+		return imin;
+}
+int initldrings(stardata *star,double lda[5])
+{
+	int i;
+	double delta,imax;
+	double totintensity[MAXNLDRINGS];
+
+	if(NLDRINGS==1)
+	{
+		star->ringr[0]=star->r;
+		star->dintensity[0]=1.0;
+		return 1;
+	}
+
+#	if USEOLDLDRING
+		for(i=0;i<NLDRINGS;i++)
+			star->ringr[i]=(i+1)*star->r/NLDRINGS; //outer radius of ith ring
+		star->dintensity[0]=ldintensity(star->ringr[0]/2.0,lda)-ldintensity((star->ringr[0]+star->ringr[1])/2.0,lda);
+		for(i=1;i<NLDRINGS-1;i++)	//amount intensity of ring i is greater than intensity of ring i+1
+			star->dintensity[i]=ldintensity((star->ringr[i-1]+star->ringr[i])/2.0,lda)-ldintensity((star->ringr[i]+star->ringr[i+1])/2.0,lda);
+		star->dintensity[NLDRINGS-1]=ldintensity((star->ringr[NLDRINGS-2]+star->ringr[NLDRINGS-1])/2.0,lda);
+		return 1;
+#	else
+		imax=ldmaxintensity(lda);
+		delta=(imax-ldintensity(1.0,lda))/NLDRINGS;
+
+		for(i=0;i<NLDRINGS-1;i++)
+			star->ringr[i]=ldradiusfromintensity(imax-((double)i+1.0)*delta,lda);
+		star->ringr[NLDRINGS-1]=1.0;
+		totintensity[0]=ldintensity(star->ringr[0]/2.0,lda);
+		star->dintensity[0]=ldintensity(star->ringr[0]/2.0,lda)-ldintensity((star->ringr[0]+star->ringr[1])/2.0,lda);
+		for(i=1;i<NLDRINGS-1;i++)	//amount intensity of ring i is greater than intensity of ring i+1
+		{
+			totintensity[i]=ldintensity((star->ringr[i-1]+star->ringr[i])/2.0,lda);
+			star->dintensity[i]=ldintensity((star->ringr[i-1]+star->ringr[i])/2.0,lda)-ldintensity((star->ringr[i]+star->ringr[i+1])/2.0,lda);
+		}
+		totintensity[NLDRINGS-1]=ldintensity((star->ringr[NLDRINGS-2]+star->ringr[NLDRINGS-1])/2.0,lda);
+		star->dintensity[NLDRINGS-1]=ldintensity((star->ringr[NLDRINGS-2]+star->ringr[NLDRINGS-1])/2.0,lda);
+		return 1;
+#	endif
+}
 int prepfileread(char fn[128],char *datastr,int maxlength)
 {	//read file into string, return length of string
 	char ch;
@@ -2824,6 +2959,7 @@ int filereads(char *rstr,char *datastr,int *current,int end)
 	*current=a;
 	return 0;
 }
+
 int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filename[64],double *lcstarttime,double *lcfinishtime,double *lcmaxlight,double *ascale,int *mcmcnpop,long int *mcmcmaxstepsortime,int *partitionpop,int *partitionsteps,double *readparam,int *randomseed,char seedfilename[64])
 {
 	int i,a,b,e;
@@ -2910,7 +3046,10 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	if(filereadd(5,x,datastr,&a,e)<0)
 		return -8;
 	stardensity=x[0];
-	star->omega=PIt2/(x[1]*86400.0);
+	if(x[1]!=0.0)
+		star->omega=PIt2/(x[1]*86400.0);
+	else
+		star->omega=0.0;
 	star->theta=x[4]*PI/180.0;
 
 	if(inifilereaderld(datastr,&a,e,lda)<0)
@@ -2975,12 +3114,8 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			printf("not flattening model light curve\n");
 #	endif
 	star->r=1.0;
-	for(i=0;i<NLDRINGS;i++)
-		star->ringr[i]=(i+1)*star->r/NLDRINGS; //outer radius of ith ring
-	star->dintensity[0]=ldintensity(star->ringr[0]/2.0,lda)-ldintensity((star->ringr[0]+star->ringr[1])/2.0,lda);
-	for(i=1;i<NLDRINGS-1;i++)	//amount intensity of ring i is greater than intensity of ring i+1
-		star->dintensity[i]=ldintensity((star->ringr[i-1]+star->ringr[i])/2.0,lda)-ldintensity((star->ringr[i]+star->ringr[i+1])/2.0,lda);
-	star->dintensity[NLDRINGS-1]=ldintensity((star->ringr[NLDRINGS-2]+star->ringr[NLDRINGS-1])/2.0,lda);
+	if(!initldrings(star,lda))
+		return -31;
 	star->maxlight=0.0;
 	for(i=NLDRINGS-1;i>=0;i--)
 		star->maxlight+=PI*star->ringr[i]*star->ringr[i]*star->dintensity[i];	
@@ -3022,7 +3157,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	if(filereads(str,datastr,&a,e)<0)
 		return -17;
 
-	if(str[0]!='L'&&str[0]!='l'&&str[0]!='H'&&str[0]!='h'&&str[0]!='S'&&str[0]!='s'&&str[0]!='D'&&str[0]!='d'&&str[0]!='T'&&str[0]!='t'&&str[0]!='x'&&str[0]!='X'&&str[0]!='f'&&str[0]!='F'&&str[0]!='p'&&str[0]!='P'&&str[0]!='u'&&str[0]!='U'&&str[0]!='I'&&str[0]!='i')
+	if(str[0]!='L'&&str[0]!='l'&&str[0]!='H'&&str[0]!='h'&&str[0]!='S'&&str[0]!='s'&&str[0]!='D'&&str[0]!='d'&&str[0]!='T'&&str[0]!='t'&&str[0]!='x'&&str[0]!='X'&&str[0]!='f'&&str[0]!='F'&&str[0]!='p'&&str[0]!='P'&&str[0]!='u'&&str[0]!='U'&&str[0]!='I'&&str[0]!='i'&&str[0]!='a'&&str[0]!='A')
 		i=0;  //unseeded mcmc
 	else if(str[0]=='l')
 		i=1;	//generate light curve and vis file from parameters
@@ -3054,8 +3189,12 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		i=9;	//plot chi squared over variation of one spot
 	else if(str[0]=='u'||str[0]=='U')
 		i=10;	//partially seeded mcmc
-	else if(str[0]=='I'||str[0]=='i')
+	else if(str[0]=='i'||str[0]=='I')
 		i=11;
+	else if(str[0]=='a')
+		i=12;
+	else if(str[0]=='A')
+		i=13;
 	else if(str[0]=='x')
 		i=100;	//x
 	else
@@ -3124,11 +3263,12 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 				return -33;
 		}
 	}
-	else if(i==1)
-	{	if(filereadd(numspots*3+1,readparam,datastr,&a,e)<0)
+	else if(i==1||i==12)
+	{	
+		if(filereadd(numspots*3+1,readparam,datastr,&a,e)<0)
 				return -23;
 	}
-	else if(i==6)
+	else if(i==6||i==13)
 	{
 		if(filereads(seedfilename,datastr,&a,e)<0)
 			return -24;
@@ -4811,6 +4951,7 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 			for(j=0;j<16;j++)
 				whichspots[j]=0;
 #		endif
+
 		light=lightness(lctime[i],star,planet,spot);
 #		if !UNNORMALIZEOUTPUT
 			lclightnorm=1.0;
@@ -4917,6 +5058,938 @@ void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAX
 	}
 	fclose(in);
 	fclose(out);
+}
+int areacoveredupdate(int sn,char eorc,int np,int nq,vwpoint p[4],vwpoint q[2],double egamma[MAXSPOTS][6],double ccgamma[MAXSPOTS][4],double cegamma[MAXSPOTS][4],int ebeencovered[MAXSPOTS],int cbeencovered[MAXSPOTS],int enreg[MAXSPOTS],int ccregactive[MAXSPOTS][3],int ceregactive[MAXSPOTS][3])
+{
+	int i,j,k,nnr,cwr,ccwr;
+	double cw[3],ccw[3];
+
+	if(eorc=='e')
+	{
+		if(np==2)	//make into regions that don't cross over zero
+		{
+			if(p[0].gamma>p[1].gamma)
+			{
+				cw[0]=0.0;
+				ccw[0]=p[1].gamma;
+				cw[1]=p[0].gamma;
+				ccw[1]=PIt2;
+				nnr=2;
+			}
+			else
+			{
+				cw[0]=p[0].gamma;
+				ccw[0]=p[1].gamma;
+				nnr=1;
+			}
+		}
+		else 
+		{
+			if(p[0].gamma>p[1].gamma)
+			{
+				cw[0]=0.0;
+				ccw[0]=p[1].gamma;
+				cw[1]=p[0].gamma;
+				ccw[1]=PIt2;
+				cw[2]=p[2].gamma;
+				ccw[2]=p[3].gamma;
+				nnr=3;
+			}
+			else
+			{
+				cw[0]=p[0].gamma;
+				ccw[0]=p[1].gamma;
+				if(p[2].gamma>p[3].gamma)
+				{
+					cw[1]=p[2].gamma;
+					ccw[1]=PIt2;
+					cw[2]=0.0;
+					ccw[2]=p[3].gamma;
+					nnr=3;
+				}
+				else
+				{
+					cw[1]=p[2].gamma;
+					ccw[1]=p[3].gamma;
+					nnr=2;
+				}
+			}
+		}		//region made
+
+		for(i=0;i<nnr;i++)
+		{
+			cwr=(-1);
+			ccwr=(-1);
+			for(j=0;j<enreg[sn];j++)	//what existing region are the end points new of region i in?
+			{
+				if(cw[i]>=egamma[sn][2*j]&&cw[i]<=egamma[sn][2*j+1])
+					cwr=j;
+				if(ccw[i]>=egamma[sn][2*j]&&ccw[i]<=egamma[sn][2*j+1])
+					ccwr=j;
+			}
+			if(cwr<0&&ccwr<0)	//both are not in an existing region 
+			{
+				k=(-1);
+				for(j=0;j<enreg[sn]&&k<0;j++)
+					if(egamma[sn][2*j]>=cw[i]&&egamma[sn][2*j]<=ccw[i])
+						k=j;
+				if(k>=0)	//new region contains an existing region
+				{
+					egamma[sn][2*k]=cw[i];
+					egamma[sn][2*k+1]=ccw[i];
+				}
+				else   //or it doesn't
+				{
+					if(enreg[sn]>=3)
+						return -1;
+					egamma[sn][2*enreg[sn]]=cw[i];
+					egamma[sn][2*enreg[sn]+1]=ccw[i];
+					enreg[sn]++;
+				}
+			}
+			else if(cwr>=0&&ccwr>=0&&cwr!=ccwr)		//they are in different regions
+			{
+				egamma[sn][2*cwr+1]=egamma[sn][2*ccwr+1];
+				egamma[sn][2*ccwr]=egamma[sn][2*cwr];
+				if(enreg[sn]==3)
+					if((cwr==0&&ccwr==1)||(cwr==1&&ccwr==0))
+					{
+						egamma[sn][2]=egamma[sn][4];
+						egamma[sn][3]=egamma[sn][5];
+					}
+				enreg[sn]--;
+			}
+			else if(cwr<0||ccwr<0)			//one is in a region, one is not
+			{
+				if(cwr>=0)
+					egamma[sn][2*cwr+1]=ccw[i];
+				else
+					egamma[sn][2*ccwr]=cw[i];
+			}
+			cwr=(-1);		//check if one region contains another
+			ccwr=(-1);
+			for(j=0;j<enreg[sn]-1;j++)
+				for(k=j+1;k<enreg[sn];k++)
+				{
+					if(egamma[sn][2*j]>egamma[sn][2*k]&&egamma[sn][2*j]<egamma[sn][2*k+1])	//k contains j
+						if(egamma[sn][2*j+1]>egamma[sn][2*k]&&egamma[sn][2*j+1]<egamma[sn][2*k+1])
+						{
+							ccwr=k;
+							cwr=j;
+						}
+						else
+							return -2;
+					if(egamma[sn][2*k]>egamma[sn][2*j]&&egamma[sn][2*k]<egamma[sn][2*j+1])	//j contains k
+						if(egamma[sn][2*k+1]>egamma[sn][2*j]&&egamma[sn][2*k+1]<egamma[sn][2*j+1])
+						{
+							ccwr=j;
+							cwr=k;
+						}
+						else return -2;
+					if(cwr>=0)
+					{
+						if(enreg[sn]==2)
+						{
+							if(ccwr==1&&cwr==0)
+							{
+								egamma[sn][0]=egamma[sn][2];
+								egamma[sn][1]=egamma[sn][3];
+							}
+							enreg[sn]--;
+						}
+						else if(enreg[sn]==3)
+						{
+							if(cwr!=2)
+							{
+								egamma[sn][2*cwr]=egamma[sn][4];
+								egamma[sn][2*cwr+1]=egamma[sn][5];
+							}
+							enreg[sn]--;
+						}
+						else
+							return -3;
+						j=(-1);
+						k=0;
+					}
+				}
+		}
+	}
+	else if(eorc=='c')
+	{
+		if(np=2&&ceregactive[sn][1]>=0)
+		{
+			cw[0]=p[0].gamma;
+			ccw[0]=p[1].gamma;
+			if(cw[0]>ccw[0])
+				return -4;
+			if(cw[0]>0.0&&ccw[0]<PI)
+			{
+				if(ceregactive[sn][1])
+				{
+					if(cw[0]<cegamma[sn][1])
+						cegamma[sn][1]=cw[0];
+					if(ccw[0]>cegamma[sn][2])
+						cegamma[sn][2]=ccw[0];
+				}
+				else
+				{
+					cegamma[sn][1]=cw[0];
+					cegamma[sn][2]=ccw[0];
+					ceregactive[sn][1]=1;
+				}
+			}
+			else if(cw[0]==0.0)
+			{
+				if(ceregactive[sn][0])
+				{
+					if(ccw[0]>cegamma[sn][0])
+						cegamma[sn][0]=ccw[0];
+				}
+				else
+				{
+					cegamma[sn][0]=ccw[0];
+					ceregactive[sn][0]=1;
+				}
+			}
+			else if(ccw[0]==PI)
+			{
+				if(ceregactive[sn][2])
+				{
+					if(cw[0]<cegamma[sn][3])
+						cegamma[sn][3]=cw[0];
+				}
+				else
+				{
+					cegamma[sn][3]=cw[0];
+					ceregactive[sn][2]=1;
+				}
+			}
+			if(ceregactive[sn][1]&&ceregactive[sn][0])
+				if(cegamma[sn][0]>cegamma[sn][1])
+				{
+					cegamma[sn][0]=cegamma[sn][2];
+					ceregactive[sn][1]=0;
+				}
+			if(ceregactive[sn][1]&&ceregactive[sn][2])
+				if(cegamma[sn][3]<cegamma[sn][2])
+				{
+					cegamma[sn][3]=cegamma[sn][1];
+					ceregactive[sn][1]=0;
+				}
+			if(ceregactive[sn][0]&&ceregactive[sn][2])
+				if(cegamma[sn][0]>ceregactive[sn][3])
+					ceregactive[sn][1]=(-1);	//signify that whole arc is covered
+		}
+		if(nq==2)
+		{
+			cw[0]=q[0].gamma;
+			ccw[0]=q[1].gamma;
+			if(cw[0]>ccw[0])
+				return -5;
+			if(cw[0]>0.0&&ccw[0]<PI)
+			{
+				if(ccregactive[sn][1])
+				{
+					if(cw[0]<ccgamma[sn][1])
+						ccgamma[sn][1]=cw[0];
+					if(ccw[0]>ccgamma[sn][2])
+						ccgamma[sn][2]=ccw[0];
+				}
+				else
+				{
+					ccgamma[sn][1]=cw[0];
+					ccgamma[sn][2]=ccw[0];
+					ccregactive[sn][1]=1;
+				}
+			}
+			else if(cw[0]==0.0)
+			{
+				if(ccregactive[sn][0])
+				{
+					if(ccw[0]>ccgamma[sn][0])
+						ccgamma[sn][0]=ccw[0];
+				}
+				else
+				{
+					ccgamma[sn][0]=ccw[0];
+					ccregactive[sn][0]=1;
+				}
+			}
+			else if(ccw[0]==PI)
+			{
+				if(ccregactive[sn][2])
+				{
+					if(cw[0]<ccgamma[sn][3])
+						ccgamma[sn][3]=cw[0];
+				}
+				else
+				{
+					ccgamma[sn][3]=cw[0];
+					ccregactive[sn][2]=1;
+				}
+			}
+			if(ccregactive[sn][1]&&ccregactive[sn][0])
+				if(ccgamma[sn][0]>ccgamma[sn][1])
+				{
+					ccgamma[sn][0]=ccgamma[sn][2];
+					ccregactive[sn][1]=0;
+				}
+			if(ccregactive[sn][1]&&ccregactive[sn][2])
+				if(ccgamma[sn][3]<ccgamma[sn][2])
+				{
+					ccgamma[sn][3]=ccgamma[sn][1];
+					ccregactive[sn][1]=0;
+				}
+			if(ccregactive[sn][0]&&ccregactive[sn][2])
+				if(ccgamma[sn][0]>ccregactive[sn][3])
+					ccregactive[sn][1]=(-1);	//signify that whole arc is covered
+		}
+	}
+	return 0;
+}
+int areacovered(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,char acoutfilename[128])
+{                       //finds portion of each spot that is never covered by the planet during one pass -- not perfect, but a reasonable approximation when it works
+	int i,j,k,np,nq,wp[4],wq[2],en,ti,a,b;
+	double starradius,t,ydif,zdif,dsq,dmax,vc,wc,lambda,y,z,dang;
+	vwpoint p[4],q[4];
+	double egamma[MAXSPOTS][6],ccgamma[MAXSPOTS][4],cegamma[MAXSPOTS][4];
+	int ebeencovered[MAXSPOTS],cbeencovered[MAXSPOTS],enreg[MAXSPOTS],ccregactive[MAXSPOTS][3],ceregactive[MAXSPOTS][3];
+	double thisarea[MAXSPOTS],maxarea[MAXSPOTS];
+	int tindexofmaxarea[MAXSPOTS];
+	double eareauncovered,careauncovered,totalarea,caparea;
+	double scaledcoveredarea[MAXSPOTS];
+
+	FILE *acout;
+
+	starradius=star->r;
+	errorflag=0;
+
+	for(i=0;i<numspots;i++)
+	{
+		ebeencovered[i]=0; cbeencovered[i]=0;
+		enreg[i]=0; 
+		maxarea[i]=0;
+		for(j=0;j<3;j++)
+		{
+			ccregactive[i][j]=0;
+			ceregactive[i][j]=0;
+		}
+	}
+
+	star->phi=star->omega*lctime[(int)(lcn/2)];
+
+	acout=fopen(acoutfilename,"w");
+	for(ti=0;ti<lcn;ti++)
+	{
+		t=lctime[ti];
+		zerototalnums();
+
+		for(i=0;i<numplanets;i++)
+		{
+			setplanetpos(t,planet,i);
+			if(planet[i].x>0)	//planet is in front of star
+				if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
+					createcircle(planet[i],star->r,star->rsq);
+		}
+
+		updatespots(spot,star->r,star->phi);
+		for(i=0;i<numspots;i++)
+			if(spot[i].psi-spot[i].alpha<PIo2)	//spot visable
+				createellipsecresent(i,spot[i],star->r);
+
+		if(totalnum.circle>0)
+		{
+			for(i=0;i<totalnum.ellipse;i++)	//-----------check ellipses
+			{
+				ellipse[i].numcircleint[0]=0;
+				ydif=circle[0].centery-ellipse[i].centery;
+				zdif=circle[0].centerz-ellipse[i].centerz;
+				dsq=ydif*ydif+zdif*zdif;
+				dmax=circle[0].radius+ellipse[i].smajor;
+				if(dsq<dmax*dmax)
+				{
+					vc=ydif*ellipse[i].vhaty+zdif*ellipse[i].vhatz;	//v-w coords of planet center
+					wc=ydif*ellipse[i].whaty+zdif*ellipse[i].whatz;	//yes, really
+					np=ellipsecircleintersection(ellipse[i].smajor,ellipse[i].sminor,vc,wc,circle[0].rsq,p);
+					if(np==0)
+					{
+						if(ellipse[i].active)
+						{
+							if((vc-ellipse[i].smajor)*(vc-ellipse[i].smajor)+wc*wc<circle[0].rsq)	//point on ellipse inside circle
+							{
+								ellipse[i].active=0;	//ellipse completely covered
+								ebeencovered[ellipse[i].spot]=1;
+							}
+							else if((vc+circle[0].radius)*(vc+circle[0].radius)/(ellipse[i].smajor*ellipse[i].smajor)+wc*wc/(ellipse[i].sminor*ellipse[i].sminor)<1.0)	//point on circle inside ellipse
+							{	
+								ellipsehole[totalnum.ellipsehole].ellipsen=i;
+								ellipsehole[totalnum.ellipsehole].circlen=0;
+								ellipsehole[totalnum.ellipsehole].area=ellipse[i].area-circle[0].area;
+								totalnum.ellipsehole++;
+								ellipse[i].active=0;
+							}
+						}
+					}
+					else if(np==2)
+					{
+						ellipse[i].numcircleint[0]=2;
+						for(j=0;j<2;j++)
+						{
+							ellipse[i].circleint[0][j].v=p[j].v;	//ellipse under circle from 0 to 1
+							ellipse[i].circleint[0][j].w=p[j].w;
+							ellipse[i].circleint[0][j].gamma=p[j].gamma;	
+						}
+						if(ellipse[i].active)
+						{
+							createellipsepart(p[1],p[0],i,0,vc,wc);
+							ellipse[i].active=0;
+							errorflag=areacoveredupdate(ellipse[i].spot,'e',2,0,p,q,egamma,ccgamma,cegamma,ebeencovered,cbeencovered,enreg,ccregactive,ceregactive);
+						}
+					}
+					else if(np==4)
+					{
+						ellipse[i].numcircleint[0]=4;
+						for(j=0;j<4;j++)
+						{
+							ellipse[i].circleint[0][j].v=p[j].v;	//ellipse under circle: 0 to 1, 2 to 3
+							ellipse[i].circleint[0][j].w=p[j].w;
+							ellipse[i].circleint[0][j].gamma=p[j].gamma;
+						}
+						if(ellipse[i].active)
+						{
+							createellipsepart(p[1],p[2],i,0,vc,wc);
+							createellipsepart(p[3],p[0],i,0,vc,wc);
+							ellipse[i].active=0;
+							errorflag=areacoveredupdate(ellipse[i].spot,'e',4,0,p,q,egamma,ccgamma,cegamma,ebeencovered,cbeencovered,enreg,ccregactive,ceregactive);
+						}
+					}
+					else
+						errorflag=4;
+				}
+			}
+
+
+			for(i=0;i<totalnum.cresent;i++)	////-----------check cresents
+			{
+				k=0;
+				en=cresent[i].ellipsen;
+				np=0;	//find circle intersections with ellipse arc
+				for(j=0;j<ellipse[en].numcircleint[0];j++)
+					if(isanglebetween(ellipsearc[cresent[i].ellipsearcn].end[0].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma,ellipse[en].circleint[0][j].gamma))
+					{
+						wp[np]=j;
+						np++;
+					}
+				nq=0;	//find circle intersections with scircle arc
+				for(j=0;j<circle[0].numstarint;j++)
+					if(isanglebetween(scirclearc[cresent[i].scirclearcn].ebeta[0],scirclearc[cresent[i].scirclearcn].ebeta[1],circle[0].starintbeta[j]))
+					{
+						if(nq>=2)
+							errorflag=4;
+						wq[nq]=j;
+						nq++;
+					}
+				if(np%2!=nq%2||np>2)
+				{
+					if(!fixcresentnpnq(starradius,i,&np,&nq,wp,wq))
+						errorflag=4;
+				}
+
+				ydif=circle[0].centery-ellipse[en].centery;
+				zdif=circle[0].centerz-ellipse[en].centerz;
+				vc=ydif*ellipse[en].vhaty+zdif*ellipse[en].vhatz;	//v-w coords of planet center
+				wc=ydif*ellipse[en].whaty+zdif*ellipse[en].whatz;	//yes, really
+				if(nq==0)
+				{
+					if(np==0)
+					{
+						if((ellipsearc[cresent[i].ellipsearcn].end[0].v-vc)*(ellipsearc[cresent[i].ellipsearcn].end[0].v-vc)+(ellipsearc[cresent[i].ellipsearcn].end[0].w-wc)*(ellipsearc[cresent[i].ellipsearcn].end[0].w-wc)<circle[0].rsq)
+						{
+							cresent[i].active=0;	//cresent covered by circle
+							cbeencovered[ellipse[cresent[i].ellipsen].spot]=1;
+						}
+						else if(circle[0].mindcen>cresent[i].mindcen&&circle[0].maxdcen<scirclearc[cresent[i].scirclearcn].radius
+								&&isanglebetween(ellipsearc[cresent[i].ellipsearcn].end[0].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma,atan2(wc,vc)))
+						{	//circle is completly inside cresent
+							cresenthole[totalnum.cresenthole].circlen=0;
+							cresenthole[totalnum.cresenthole].cresentn=i;
+							cresenthole[totalnum.cresenthole].area=cresent[i].area-circle[0].area;
+							totalnum.cresenthole++;
+							cresent[i].active=0;
+							whichspots[ellipse[cresent[i].ellipsen].spot]=1;
+						}
+					}
+					else if(np==2)	//np=2 nq=0
+					{
+						createcresentpart20(ellipse[en].circleint[0][wp[0]],ellipse[en].circleint[0][wp[1]],i,en,0,vc,wc);
+						cresent[i].active=0;
+						errorflag=areacoveredupdate(ellipse[cresent[i].ellipsen].spot,'c',2,0,p,q,egamma,ccgamma,cegamma,ebeencovered,cbeencovered,enreg,ccregactive,ceregactive);
+					}
+					else
+						errorflag=4;
+				}
+				else if(nq==2)
+				{
+					for(j=0;j<2;j++)
+					{
+						ydif=starradius*cos(circle[0].starintbeta[wq[j]])-ellipse[en].centery;
+						zdif=starradius*sin(circle[0].starintbeta[wq[j]])-ellipse[en].centerz;
+						q[j].v=ydif*ellipse[en].vhaty+zdif*ellipse[en].vhatz;	
+						q[j].w=ydif*ellipse[en].whaty+zdif*ellipse[en].whatz;	
+						q[j].gamma=atan2(q[j].w,q[j].v);
+						if(q[j].gamma<0) q[j].gamma+=PIt2;
+					}
+					if(np==0)	//np=0 nq=2
+					{
+						createcresentpart02(q[0],q[1],i,en,0,vc,wc,starradius);
+						cresent[i].active=0;
+						errorflag=areacoveredupdate(ellipse[cresent[i].ellipsen].spot,'c',0,2,p,q,egamma,ccgamma,cegamma,ebeencovered,cbeencovered,enreg,ccregactive,ceregactive);
+					}
+					else if(np==2)	//np=2 nq=2
+					{
+						createcresentpart11(ellipse[en].circleint[0][wp[0]],q[0],1,i,en,0,vc,wc,starradius);
+						createcresentpart11(ellipse[en].circleint[0][wp[1]],q[1],0,i,en,0,vc,wc,starradius);
+						cresent[i].active=0;
+						errorflag=areacoveredupdate(ellipse[cresent[i].ellipsen].spot,'c',2,2,p,q,egamma,ccgamma,cegamma,ebeencovered,cbeencovered,enreg,ccregactive,ceregactive);
+					}
+					else
+						errorflag=4;
+				}
+				else if(nq==1)
+				{
+					ydif=starradius*cos(circle[0].starintbeta[wq[0]])-ellipse[en].centery;
+					zdif=starradius*sin(circle[0].starintbeta[wq[0]])-ellipse[en].centerz;
+					q[0].v=ydif*ellipse[en].vhaty+zdif*ellipse[en].vhatz;	
+					q[0].w=ydif*ellipse[en].whaty+zdif*ellipse[en].whatz;	
+					q[0].gamma=atan2(q[0].w,q[0].v);
+					if(q[0].gamma<0) q[0].gamma+=PIt2;
+					if(np==1)
+					{
+						if(wq[0]%2!=wp[0]%2)
+							errorflag=4;
+						if(wq[0]==0)
+						{                 //clockwise side
+							createcresentpart11(ellipse[en].circleint[0][wp[0]],q[0],1,i,en,0,vc,wc,starradius);
+							p[0].gamma=0.0;  //not really zero, just the end
+							p[1].gamma=ellipse[en].circleint[0][wp[0]].gamma;
+							q[1].gamma=q[0].gamma;
+							q[0].gamma=0.0;
+						}
+						else
+						{                 //counterclockwise side
+							createcresentpart11(ellipse[en].circleint[0][wp[0]],q[0],0,i,en,0,vc,wc,starradius);
+							p[0].gamma=ellipse[en].circleint[0][wp[0]].gamma;
+							p[1].gamma=PI;  //not really PI, just the end
+							q[1].gamma=PI;
+						}
+						errorflag=areacoveredupdate(ellipse[cresent[i].ellipsen].spot,'c',2,2,p,q,egamma,ccgamma,cegamma,ebeencovered,cbeencovered,enreg,ccregactive,ceregactive);
+						cresent[i].active=0;
+					}
+					else
+						errorflag=4;
+				}
+				else
+					errorflag=4;
+			}
+		}
+		if(errorflag)
+			return errorflag;
+		for(i=0;i<numspots;i++)
+			thisarea[i]=0;
+		for(i=0;i<totalnum.ellipse;i++)
+			thisarea[ellipse[i].spot]=ellipse[i].area;
+		for(i=0;i<totalnum.cresent;i++)
+			thisarea[ellipse[cresent[i].ellipsen].spot]+=cresent[i].area;
+		for(i=0;i<numspots;i++)
+			if(thisarea[i]>maxarea[i])
+			{
+				maxarea[i]=thisarea[i];
+				tindexofmaxarea[i]=ti;
+			}
+	}
+
+	for(k=0;k<numspots;k++)
+	{
+		t=lctime[tindexofmaxarea[k]];
+		zerototalnums();
+
+		star->phi=star->omega*t;
+
+		for(i=0;i<numplanets;i++)
+		{
+			setplanetpos(t,planet,i);
+			if(planet[i].x>0)	//planet is in front of star
+				if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
+					createcircle(planet[i],star->r,star->rsq);
+		}
+
+		updatespots(spot,star->r,star->phi);
+		for(i=0;i<numspots;i++)
+			if(spot[i].psi-spot[i].alpha<PIo2)	//spot visable
+				createellipsecresent(i,spot[i],star->r);
+
+		totalarea=0.0;
+		eareauncovered=0.0;
+		i=(-1);
+		for(j=0;j<totalnum.ellipse;j++)
+			if(ellipse[j].spot==k)
+				i=j;
+		if(i>=0)	//ellipse i is spot k
+		{
+			totalarea=ellipse[i].area;
+			if(ebeencovered[k])		//totally covered
+				eareauncovered=0.0;
+			else if(enreg[k]==0)	//totally uncovered
+				eareauncovered=ellipse[i].area;
+			else					//somewhat covered
+			{
+				if(enreg[k]>1)	//if split at zero, combine
+				{
+					a=(-1);
+					b=(-1);
+					for(j=0;j<enreg[k];j++)
+					{
+						if(egamma[k][2*j]==0.0)
+							b=j;
+						if(egamma[k][2*j+1]==PIt2)
+							a=j;
+					}
+					if(a>=0&&b>=0)
+					{
+						egamma[k][2*b]=egamma[k][2*a];
+						egamma[k][2*a+1]=egamma[k][2*b+1];
+						if(a<2&&b<2)
+						{
+							egamma[k][2]=egamma[k][4];
+							egamma[k][3]=egamma[k][5];
+						}
+						enreg[k]--;
+					}
+				}
+				
+				if(enreg[k]==1)
+					eareauncovered=areaellipsesection(ellipse[i].smajor,ellipse[i].sminor,egamma[k][1],egamma[k][0]);
+				else if(enreg[k]==2)
+					eareauncovered=areaellipsesection(ellipse[i].smajor,ellipse[i].sminor,egamma[k][1],egamma[k][2])+areaellipsesection(ellipse[i].smajor,ellipse[i].sminor,egamma[k][3],egamma[k][0]);
+				else
+					return 5;
+			}
+		}		//end of ellipse part
+
+		careauncovered=0.0;
+		i=(-1);
+		for(j=0;j<totalnum.cresent;j++)
+			if(ellipse[cresent[j].ellipsen].spot==k)
+				i=j;
+		if(i>=0)	//cresent i is spot k
+		{
+			totalarea+=cresent[i].area;
+			if(cbeencovered[k])
+				careauncovered=0.0;
+			else
+			{
+				a=0; b=0;
+				for(j=0;j<3;j++)
+				{
+					if(ccregactive[k][j])
+						a++;
+					if(ceregactive[k][j])
+						b++;
+				}
+
+				if(a>2||b>2)
+					return 6;
+
+				if(a==0)
+				{
+					if(b!=0)
+						return 7;
+					if(ccregactive[k][1]<0&&ceregactive[k][1]<0)		//both sides all covered
+						careauncovered=0.0;	
+					else if(ccregactive[k][1]==0&&ceregactive[k][1]==0)	//both sides all uncovered
+						careauncovered=cresent[i].area;
+					else
+						return 8;
+				}
+				else
+				{
+					p[0].gamma=p[1].gamma=p[2].gamma=q[0].gamma=q[1].gamma=q[2].gamma=(-1.0);	//set up p and q 
+					if(ceregactive[k][0])
+					{
+						p[0].gamma=cegamma[k][0];
+						if(ceregactive[k][1])
+						{
+							p[1].gamma=cegamma[k][1];
+							p[2].gamma=cegamma[k][2];
+							if(ceregactive[k][2])
+								return 9;
+						}
+						else if(ceregactive[k][2])
+							p[1].gamma=cegamma[k][3];
+					}
+					else
+					{
+						if(ceregactive[k][1])
+						{
+							p[0].gamma=cegamma[k][1];
+							p[1].gamma=cegamma[k][2];
+							if(ceregactive[k][2])
+								p[2].gamma=cegamma[k][3];
+						}
+						else if(ceregactive[k][2])
+							p[0].gamma=cegamma[k][3];
+					}
+					if(ccregactive[k][0])
+					{
+						q[0].gamma=ccgamma[k][0];
+						if(ccregactive[k][1])
+						{
+							q[1].gamma=ccgamma[k][1];
+							q[2].gamma=ccgamma[k][2];
+							if(ccregactive[k][2])
+								return 10;
+						}
+						else if(ccregactive[k][2])
+							q[1].gamma=ccgamma[k][3];
+					}
+					else
+					{
+						if(ccregactive[k][1])
+						{
+							q[0].gamma=ccgamma[k][1];
+							q[1].gamma=ccgamma[k][2];
+							if(ccregactive[k][2])
+								q[2].gamma=ccgamma[k][3];
+						}
+						else if(ccregactive[k][2])
+							q[0].gamma=ccgamma[k][3];
+					}
+					for(j=0;j<3;j++)
+					{
+						if(p[j].gamma>=0)
+						{
+							lambda=atan(ellipse[cresent[i].ellipsen].smajor*tan(p[j].gamma)/ellipse[cresent[i].ellipsen].sminor);
+							if(p[j].gamma>PIo2&&p[j].gamma<thPIo2)
+								lambda+=PI;
+							p[j].v=ellipse[k].smajor*cos(lambda);
+							p[j].w=ellipse[k].sminor*sin(lambda);
+						}
+						if(q[j].gamma>=0)
+						{
+							lambda=atan(ellipse[cresent[i].ellipsen].smajor*tan(q[j].gamma)/ellipse[cresent[i].ellipsen].sminor);
+							if(q[j].gamma>PIo2&&q[j].gamma<thPIo2)
+								lambda+=PI;
+							q[j].v=ellipse[k].smajor*cos(lambda);
+							q[j].w=ellipse[k].sminor*sin(lambda);
+						}
+					}		//p and q are set
+
+					if(b==0)
+					{
+						if(ccregactive[k][0]==ccregactive[k][2]&&ccregactive[k][0]!=ccregactive[k][1])
+						{
+							vwtoyz(p[1].v,p[1].w,cresent[i].ellipsen,&y,&z);
+							dang=atan2(z,y);
+							vwtoyz(p[0].v,p[0].w,cresent[i].ellipsen,&y,&z);
+							dang=dang-atan2(z,y);
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered=areacirclesection(starradius,dang);
+							if(ccregactive[k][1])
+								careauncovered=cresent[i].area-careauncovered;
+						}
+						else
+							return 9;
+					}
+					else if(a==1&&b==1&&!ccregactive[k][1])
+					{
+						if(ccregactive[k][0]&&ceregactive[k][0])
+						{
+							careauncovered=areatriangle(p[0],q[0],ellipsearc[cresent[i].ellipsearcn].end[1]);
+							careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,p[0].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma);
+							dang=scirclearc[cresent[i].scirclearcn].ebeta[1];
+							vwtoyz(q[0].v,q[0].w,cresent[i].ellipsen,&y,&z);
+							dang-=atan2(z,y);
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+						}
+						else if(ccregactive[k][2]&&ceregactive[k][2])
+						{
+							careauncovered=areatriangle(q[0],p[0],ellipsearc[cresent[i].ellipsearcn].end[0]);
+							careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,ellipsearc[cresent[i].ellipsearcn].end[0].gamma,p[0].gamma);
+							vwtoyz(q[0].v,q[0].w,cresent[i].ellipsen,&y,&z);
+							dang=atan2(z,y);
+							dang-=scirclearc[cresent[i].scirclearcn].ebeta[0];
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+						}
+						else
+							return 10;
+					}
+					else if((a==1&&b==1&&ccregactive[k][1]&&ceregactive[k][1])||(a==2&&b==2&&(!ccregactive[k][1])&&(!ceregactive[k][1])))
+					{
+						careauncovered=areatriangle(p[1],q[1],ellipsearc[cresent[i].ellipsearcn].end[1]);
+						careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,p[1].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma);
+						dang=scirclearc[cresent[i].scirclearcn].ebeta[1];
+						vwtoyz(q[1].v,q[1].w,cresent[i].ellipsen,&y,&z);
+						dang-=atan2(z,y);
+						if(dang<0)
+							dang+=PIt2;
+						careauncovered+=areacirclesection(starradius,dang);
+
+						careauncovered+=areatriangle(q[0],p[0],ellipsearc[cresent[i].ellipsearcn].end[0]);
+						careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,ellipsearc[cresent[i].ellipsearcn].end[0].gamma,p[0].gamma);
+						vwtoyz(q[0].v,q[0].w,cresent[i].ellipsen,&y,&z);
+						dang=atan2(z,y);
+						dang-=scirclearc[cresent[i].scirclearcn].ebeta[0];
+						if(dang<0)
+							dang+=PIt2;
+						careauncovered+=areacirclesection(starradius,dang);
+
+						if(a==2)
+							careauncovered=cresent[i].area-careauncovered;
+					}
+					else if(a==2&&b==1&&(!ceregactive[k][1]))
+					{
+						if(ccregactive[k][0]&&ceregactive[k][0])
+						{
+							careauncovered=areatriangle(p[0],q[2],ellipsearc[cresent[i].ellipsearcn].end[1]);
+							careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,p[0].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma);
+							dang=scirclearc[cresent[i].scirclearcn].ebeta[1];
+							vwtoyz(q[2].v,q[2].w,cresent[i].ellipsen,&y,&z);
+							dang-=atan2(z,y);
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+							vwtoyz(q[1].v,q[1].w,cresent[i].ellipsen,&y,&z);
+							dang=atan2(z,y);
+							vwtoyz(q[0].v,q[0].w,cresent[i].ellipsen,&y,&z);
+							dang-=atan2(z,y);
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+						}
+						else if(ccregactive[k][2]&&ceregactive[k][2])
+						{
+							careauncovered=areatriangle(q[0],p[0],ellipsearc[cresent[i].ellipsearcn].end[0]);
+							careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,ellipsearc[cresent[i].ellipsearcn].end[0].gamma,p[0].gamma);
+							vwtoyz(q[0].v,q[0].w,cresent[i].ellipsen,&y,&z);
+							dang=atan2(z,y);
+							dang-=scirclearc[cresent[i].scirclearcn].ebeta[0];
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+							vwtoyz(q[2].v,q[2].w,cresent[i].ellipsen,&y,&z);
+							dang=atan2(z,y);
+							vwtoyz(q[1].v,q[1].w,cresent[i].ellipsen,&y,&z);
+							dang-=atan2(z,y);
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+						}
+						else
+							return 11;
+
+					}
+					else if(a==2&&b==2&&ccregactive[k][1]&&ceregactive[k][1])
+					{
+						if((!ceregactive[k][2])&&(!ccregactive[k][2]))
+						{
+							careauncovered=areatriangle(p[2],q[2],ellipsearc[cresent[i].ellipsearcn].end[1]);
+							careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,p[2].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma);
+							dang=scirclearc[cresent[i].scirclearcn].ebeta[1];
+							vwtoyz(q[2].v,q[2].w,cresent[i].ellipsen,&y,&z);
+							dang-=atan2(z,y);
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+
+							careauncovered+=areatriangle(q[1],p[1],ellipsearc[cresent[i].ellipsearcn].end[0]);
+							careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,ellipsearc[cresent[i].ellipsearcn].end[0].gamma,p[1].gamma);
+							vwtoyz(q[1].v,q[1].w,cresent[i].ellipsen,&y,&z);
+							dang=atan2(z,y);
+							dang-=scirclearc[cresent[i].scirclearcn].ebeta[0];
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+
+							careauncovered-=areatriangle(q[0],p[0],ellipsearc[cresent[i].ellipsearcn].end[0]);
+							careauncovered+=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,ellipsearc[cresent[i].ellipsearcn].end[0].gamma,p[0].gamma);
+							vwtoyz(q[0].v,q[0].w,cresent[i].ellipsen,&y,&z);
+							dang=atan2(z,y);
+							dang-=scirclearc[cresent[i].scirclearcn].ebeta[0];
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered-=areacirclesection(starradius,dang);
+						}
+						else if((!ceregactive[k][0])&&(!ccregactive[k][0]))
+						{
+							careauncovered=areatriangle(p[1],q[1],ellipsearc[cresent[i].ellipsearcn].end[1]);
+							careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,p[1].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma);
+							dang=scirclearc[cresent[i].scirclearcn].ebeta[1];
+							vwtoyz(q[1].v,q[1].w,cresent[i].ellipsen,&y,&z);
+							dang-=atan2(z,y);
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+
+							careauncovered+=areatriangle(q[0],p[0],ellipsearc[cresent[i].ellipsearcn].end[0]);
+							careauncovered-=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,ellipsearc[cresent[i].ellipsearcn].end[0].gamma,p[0].gamma);
+							vwtoyz(q[0].v,q[0].w,cresent[i].ellipsen,&y,&z);
+							dang=atan2(z,y);
+							dang-=scirclearc[cresent[i].scirclearcn].ebeta[0];
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered+=areacirclesection(starradius,dang);
+
+							careauncovered-=areatriangle(p[2],q[2],ellipsearc[cresent[i].ellipsearcn].end[1]);
+							careauncovered+=areaellipsesection(ellipse[cresent[i].ellipsen].smajor,ellipse[cresent[i].ellipsen].sminor,p[2].gamma,ellipsearc[cresent[i].ellipsearcn].end[1].gamma);
+							dang=scirclearc[cresent[i].scirclearcn].ebeta[1];
+							vwtoyz(q[2].v,q[2].w,cresent[i].ellipsen,&y,&z);
+							dang-=atan2(z,y);
+							if(dang<0)
+								dang+=PIt2;
+							careauncovered-=areacirclesection(starradius,dang);
+						}
+						else
+							return 12;
+					}
+					else  
+						return 13;
+				}
+			}
+		}	//end of cresent part
+
+		fprintf(acout,"spot %i\n projected area covered:%lf\n total projected area: %lf\n",k,totalarea-(eareauncovered+careauncovered),totalarea);
+		printf("spot %i\n projected area covered:%lf\n total projected area: %lf\n",k,totalarea-(eareauncovered+careauncovered),totalarea);
+
+		caparea=PIt2*starradius*starradius*(1.0-cos(spot[k].alpha));
+		if(totalarea>0.0)
+			scaledcoveredarea[k]=(totalarea-eareauncovered-careauncovered)/totalarea;	//fraction covered 
+		else
+			scaledcoveredarea[k]=0.0;
+
+		fprintf(acout,"     projected fraction covered: %lf\n total area on sperical surface: %lf\n",scaledcoveredarea[k],caparea);
+		printf("     projected fraction covered: %lf\n total area on sperical surface: %lf\n",scaledcoveredarea[k],caparea);
+
+		scaledcoveredarea[k]*=caparea;	//times area of spherical cap
+
+		fprintf(acout,"         total covered area on surface of sphere: %lf\n\n",scaledcoveredarea[k]);
+		printf("         total covered area on surface of sphere: %lf\n\n",scaledcoveredarea[k]);
+	}
+
+	caparea=PI*starradius*starradius*(2.0*planet[0].r);	//area of ribbon covered by planet
+	totalarea=0.0;
+	for(i=0;i<numspots;i++)
+		totalarea+=scaledcoveredarea[i];
+
+	fprintf(acout,"\n       sum of spot areas covered: %lf\narea of ribbon covered by planet: %lf\n\nfraction of ribbon with spots: %lf\n",totalarea,caparea,totalarea/caparea);
+	printf("\n       sum of spot areas covered: %lf\narea of ribbon covered by planet: %lf\n\nfraction of ribbon with spots: %lf\n",totalarea,caparea,totalarea/caparea);
+	
+	fclose(acout);
+	return 0;
 }
 void debuglc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[])
 {
@@ -5314,6 +6387,15 @@ int main(int argc,char *argv[])
 	else if(j==11)
 	{
 		initialguess(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,seedfilename);
+	}
+	else if(j==12||j==13)
+	{
+		sprintf(seedfilename,"%s_acout.txt",rootname);
+		setspots(readparam,spot,star,planet);
+		printf("finding spot area not covered\n");
+		i=areacovered(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,seedfilename);
+		if(i)
+			printf("error %i\n",i);
 	}
 	else if(j==100)
 	{
