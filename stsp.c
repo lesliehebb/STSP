@@ -18,7 +18,7 @@
 #define PRECALCPLANET 1				//1 -> optimize by precalculating planet effect at each time
 #define COMBINEONESPOT	0			//whether to combine one spot at a time or a whole chain (should be 0)
 #define COMBINERSINTHETA 0			//whether to use r or r*sin(theta) as the combination variable
-#define USEOLDLDRING 1				//whether to use the old uniformly spaced limb darkening ring system
+#define USEOLDLDRING 1				//whether to use the old uniformly spaced limb darkening ring system (0=new system)
 
 #define ALWAYSAVERAGETIME 0			//whether to average time when using maxsteps (in mcmc)
 #define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
