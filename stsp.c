@@ -1536,8 +1536,8 @@ double realstararea(double starradius)
 #		endif
 		totarea-=darea;
 	}
-	if(totarea<0||totarea>PI*starradius*starradius)
-		errorflag=5;
+// 	if(totarea<0||totarea>PI*starradius*starradius)
+// 		errorflag=5;
 	return totarea;
 }
 double ldcirclearea(double starradius,int cn)
@@ -2239,9 +2239,9 @@ double ldstararea(double starradius)
 				errorflag=9;
 			}
 
-	if(totarea>PI*starradius*starradius)
-		if(!errorflag)
-			errorflag=9;
+// 	if(totarea>PI*starradius*starradius)
+// 		if(!errorflag)
+// 			errorflag=9;
 
 	return totarea;
 }
