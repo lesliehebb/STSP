@@ -24,35 +24,36 @@ Input File Stucture
 	0.0                    ; esinw  
 
 #STAR PROPERTIES
-1.15976225             ; Mean Stellar density (Msun/Rsun^3)  (related to a/Rstar)
-12.1012                ; Stellar Rotation period (days)
-5801                   ; Stellar Temperature  (not used)
-0.0                    ; Stellar metallicity  (not used)
-32.0                   ; Tilt of the rotation axis of the star down from z-axis (degrees)
-0.83143 -0.68444 0.55014 -0.19879         ; Limb darkening (4 coefficients)
-100                    ; number of rings for limb darkening approximation
+
+	1.15976225             ; Mean Stellar density (Msun/Rsun^3)  (related to a/Rstar)
+	12.1012                ; Stellar Rotation period (days)
+	5801                   ; Stellar Temperature  (not used)
+	0.0                    ; Stellar metallicity  (not used)
+	32.0                   ; Tilt of the rotation axis of the star down from z-axis (degrees)
+	0.83143 -0.68444 0.55014 -0.19879         ; Limb darkening (4 coefficients)
+	100                    ; number of rings for limb darkening approximation
+
 #SPOT PROPERTIES
-6                      ; number of spots
-0.67                   ; fractional brightness of spots (0.0= totally dark, 1.0=brightness of star)
+
+	6                      ; number of spots
+	0.67                   ; fractional brightness of spots (0.0= totally dark, 1.0=brightness of star)
+
 # FITTING properties
-kepler17.lc            ; lightcurve data file
-1201.000               ; start time to start fitting the light curve
-10.0                   ; duration of light curve to fit (days)
-1.00002909234          ; real maximum of light curve data (corrected for noise), 0 -> STSP uses simple downfrommax
-1                      ; is light curve flattened (to zero) outside of transits?
+
+	kepler17.lc            ; lightcurve data file
+	1201.000               ; start time to start fitting the light curve
+	10.0                   ; duration of light curve to fit (days)
+	1.00002909234          ; real maximum of light curve data (corrected for noise), 0 -> STSP uses simple downfrommax
+	1                      ; is light curve flattened (to zero) outside of transits?
+
 # ACTION
-H                      ; M / S / T / L / H -- M: Affine invariant MCMC sampling starting with random values for all parameters (MCMC)
-                       ; fM / fS / fT         S or s: Affine invariant MCMC seeded with initial values given in the next lines after this one (Seeded MCMC)
-                            T: Affine invariant MCMC where all parameters for all chains are seeded (Totally seeded MCMC)
-                            L or l: Just generate the light curve for a set of parameter values given in the next lines
-                            H: Metropolis-Hastings MCMC sampling starting with random values for parameters
-                       ; small s and l mean
 
 --- THE REMAINING LINES DEPEND ON THE VALUE OF THE ACTION PARAMETER --
 
 If the ACTION is set to m, then the following lines need to be random seed, scale factor, number of chains, number of steps/chain
 
 # ACTION
+
    m              ; M= unseeded mcmc
    74384338       ; random seed
    1.25000        ; ascale
@@ -63,6 +64,7 @@ If the ACTION is set to m, then the following lines need to be random seed, scal
 If the ACTION is set to s, then the following lines need to be the same 5 above + sigma for radius and angle variations and spot properties for Ns spots
 
 # ACTION
+
    s               ; s= unseeded mcmc
    74384338        ; random seed
    1.25            ; ascale
