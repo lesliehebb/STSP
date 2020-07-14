@@ -38,7 +38,7 @@ Input File Stucture
 	6                      ; number of spots
 	0.67                   ; fractional brightness of spots (0.0= totally dark, 1.0=brightness of star)
 
-# FITTING properties
+#FITTING PROPERTIES
 
 	kepler17.lc            ; lightcurve data file
 	1201.000               ; start time to start fitting the light curve
@@ -46,13 +46,13 @@ Input File Stucture
 	1.00002909234          ; real maximum of light curve data (corrected for noise), 0 -> STSP uses simple downfrommax
 	1                      ; is light curve flattened (to zero) outside of transits?
 
-# ACTION
+#ACTION
 
 --- THE REMAINING LINES DEPEND ON THE VALUE OF THE ACTION PARAMETER --
 
 If the ACTION is set to m, then the following lines need to be random seed, scale factor, number of chains, number of steps/chain
 
-# ACTION
+#ACTION
 
    m              ; M= unseeded mcmc
    74384338       ; random seed
@@ -63,7 +63,7 @@ If the ACTION is set to m, then the following lines need to be random seed, scal
 
 If the ACTION is set to s, then the following lines need to be the same 5 above + sigma for radius and angle variations and spot properties for Ns spots
 
-# ACTION
+#ACTION
 
    s               ; s= unseeded mcmc
    74384338        ; random seed
@@ -81,7 +81,7 @@ If the ACTION is set to s, then the following lines need to be the same 5 above 
 If the ACTION is set to l, then the following lines need to give the radius (0.0-->1.0), latitude (in radians) and longitude (in radians) for each spot.
 For example, for 3 spots and to generate the light curve only, the following lines of the input file would read:
 
-# ACTION
+#ACTION
     l
     0.220		; spot 1 radius
     2.457		; spot 1 theta
@@ -96,7 +96,7 @@ For example, for 3 spots and to generate the light curve only, the following lin
 
 If the action is capitalized all the action parameters are in a text file. STSP expects the name of the text file with the Action parameters
 
-# ACTION 
+#ACTION 
 
     L
     kepler17_parambest.txt  ; file name for parameter file from a previous run that contains the parameters for all the objects
