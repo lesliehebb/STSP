@@ -54,12 +54,12 @@ If the ACTION is set to m, then the following lines need to be random seed, scal
 
 #ACTION
 
-   m              ; M= unseeded mcmc
-   74384338       ; random seed
-   1.25000        ; ascale
-   40             ; number of chains
-   5000           ; mcmc steps
-   1              ; normalization factor, 0= use downfrommax normalization, 1= calculate brightness factor for every model
+	m              ; M= unseeded mcmc
+	74384338       ; random seed
+	1.25000        ; ascale
+	40             ; number of chains
+	5000           ; mcmc steps
+	1              ; normalization factor, 0= use downfrommax normalization, 1= calculate brightness factor for every model
 
 If the ACTION is set to s, then the following lines need to be the same 5 above + sigma for radius and angle variations and spot properties for Ns spots
 
