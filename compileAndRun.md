@@ -11,6 +11,7 @@ The input file for stsp has the following structure:
 Input File Stucture
 
 #PLANET PROPERTIES
+
 	1                      ; Number of planets
 	132.792729             ; T0, time of the middle of first transit in days  (Better if this number is closer to zero)
 	1.48571127             ; Planet Period      (days)
@@ -21,6 +22,7 @@ Input File Stucture
 	0.0                    ; Lambda of orbit (0 deg = orbital axis along z-axis) - angle between spin axis of star and orbital axis of planet
 	0.0                    ; ecosw  
 	0.0                    ; esinw  
+
 #STAR PROPERTIES
 1.15976225             ; Mean Stellar density (Msun/Rsun^3)  (related to a/Rstar)
 12.1012                ; Stellar Rotation period (days)
