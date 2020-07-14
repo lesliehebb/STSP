@@ -3,6 +3,13 @@ STSP
 
 In and out of transit starspot modeling code
 
+V4.6    2017-08
+
+Added the functionality for determining the guess for the latitude
+and longitude of a spot based on the timeing of a starspot crossing
+feature.   Added the functionality for measuring the area covered 
+by spots in a transit chord.
+
 V4.5    2015-11-30
 
 Added the functionality for analyzing planets on eccentric orbits.
