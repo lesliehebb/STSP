@@ -5,9 +5,8 @@
 
 #define QUIET 0				//0 -> prints things, 1 -> only prints errors
 #define QUIETMCMC 0			//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
-#define ALWAYSPRINTVIS 0
 #define WHICHPRINTVIS 1		// what sort of visualization file to output (j-1,g-2)
-#define ANYPRINTVIS 0		//0 for speed, overrides other PRINTVIS preferences
+#define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
 #define DEFAULTFILENAME "window044_action_a.in"
@@ -4144,7 +4143,7 @@ void metrohast(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPO
 	for(j=0;j<numspots;j++)
 		fprintf(bestparam,"%lf    radius\n%lf    theta\n%lf    phi\n",spot[j].r,spot[j].thetarel*180.0/PI,spot[j].phirel*180/PI);
 
-#	if ANYPRINTVIS&&ALWAYSPRINTVIS
+#	if ANYPRINTVIS
 		PRINTVIS=WHICHPRINTVIS;
 		sprintf(filename,"%s_vis.txt",rootname);
 		outv=fopen(filename,"w");
@@ -4871,7 +4870,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 		fprintf(parambest,"%lf    radius\n%lf    theta\n%lf    phi\n",spot[j].r,spot[j].thetarel*180.0/PI,spot[j].phirel*180/PI);
 	fprintf(parambest,"%lf     unoccluded brightness\n",star->brightnessfactor*star->area/lclightnorm);
 
-#	if ANYPRINTVIS&&ALWAYSPRINTVIS
+#	if ANYPRINTVIS
 		PRINTVIS=WHICHPRINTVIS;
 		sprintf(filename,"%s_vis.txt",rootname);
 		outv=fopen(filename,"w");
@@ -5002,7 +5001,7 @@ void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAX
 	FILE *in,*out;
 	int i,j;
 	double tday,t,theta,phi;
-	double r[3],xhat[3],zhat[3],dp;
+	double r[3],xhat[3],zhat[3],dp,rp[3];
 
 	in=fopen(infilename,"r");
 
@@ -5045,8 +5044,13 @@ void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAX
 					r[2]=planet[i].z/star->r;
 					dp=r[0]*zhat[0]+r[1]*zhat[1]+r[2]*zhat[2];
 					theta=acos(dp);
+					for(j=0;j<3;j++)
+						rp[j]=r[j]-dp*zhat[j];
+					dp=sqrt(rp[0]*rp[0]+rp[1]*rp[1]+rp[2]*rp[2]);
+					for(j=0;j<3;j++)
+						r[j]=rp[j]/dp;
 					dp=r[0]*xhat[0]+r[1]*xhat[1]+r[2]*xhat[2];
-					phi=acos(dp/sin(theta));
+					phi=acos(dp);
 					fprintf(out,"%0.9lf %0.9lf\n",theta,phi);
 				}
 				else
