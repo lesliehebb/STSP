@@ -9,7 +9,7 @@
 #define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "window001_run001.in"
+#define DEFAULTFILENAME "transit31_i.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -4937,6 +4937,7 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 {
 	int i,j,realnum;
 	double light,torig,l1,l2;
+	double dif,chisq;
 	unsigned int whichspot;
 	FILE *lcout;
 
@@ -4952,6 +4953,8 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 #		endif
 
 		light=lightness(lctime[i],star,planet,spot);
+		dif=light-lclight[i];
+		chisq+=dif*dif/(lcuncertainty[i]*lcuncertainty[i]);
 #		if !UNNORMALIZEOUTPUT
 			lclightnorm=1.0;
 #		endif
@@ -4994,6 +4997,7 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 #		endif
 	}
 	fclose(lcout);
+	printf("chisq= %lf\n",chisq);
 }
 void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],int lcn,double lctime[],double lclight[],double lcuncertainty[],double lclightnorm,char infilename[128])
 {
