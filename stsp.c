@@ -3,7 +3,7 @@
 #include <math.h>
 #include <time.h>
 
-#define QUIET 0				//0 -> prints things, 1 -> only prints errors
+#define QUIET 1				//0 -> prints things, 1 -> only prints errors
 #define QUIETMCMC 0			//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
 #define WHICHPRINTVIS 1		// what sort of visualization file to output (j-1,g-2)
 #define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
@@ -23,12 +23,12 @@
 #define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
 #define PRINTPLANETSPOTOVERLAP 0	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
 
-#define MAXSPOTS 10
+#define MAXSPOTS 1000
 #define MAXPLANETS 1
-#define TWICEMAXSPOTSMAXPLANETS 20
-#define FOURMAXSPOTSMAXPLANETS 40
+#define TWICEMAXSPOTSMAXPLANETS 2000
+#define FOURMAXSPOTSMAXPLANETS 4000
 
-#define MAXNLDRINGS 100
+#define MAXNLDRINGS 150
 
 #define RND (((double)rand())/(double)RAND_MAX)
 #define PIo2 1.5707963267948966192313216916398
@@ -2595,7 +2595,7 @@ double lightnessindexed(double t,stardata *star,planetdata planet[MAXPLANETS],sp
 	return thelightness;
 }
 #endif
-int inifilereaderld(char datastr[4096],int *a,int e,double lda[5])
+int inifilereaderld(char datastr[32768],int *a,int e,double lda[5])
 {
 	int i,b[4],c;
 
@@ -2789,7 +2789,8 @@ int initldrings(stardata *star,double lda[5])
 		return 1;
 #	endif
 }
-int prepfileread(char fn[128],char *datastr,int maxlength)
+/* BM int prepfileread(char fn[128],char *datastr,int maxlength) */
+int prepfileread(char fn[1024],char *datastr,int maxlength)
 {	//read file into string, return length of string
 	char ch;
 	int i;
@@ -2962,11 +2963,11 @@ int filereads(char *rstr,char *datastr,int *current,int end)
 int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filename[64],double *lcstarttime,double *lcfinishtime,double *lcmaxlight,double *ascale,int *mcmcnpop,long int *mcmcmaxstepsortime,int *partitionpop,int *partitionsteps,double *readparam,int *randomseed,char seedfilename[64])
 {
 	int i,a,b,e;
-	char str[128],datastr[4096];
+	char str[128],datastr[32768];
 	double x[9],stardensity,ppdays;
 	double lda[5];		//limb darkening coeffecients (really just 4)
 	
-	e=prepfileread(filename,datastr,4096);
+	e=prepfileread(filename,datastr,32768);
 	if(e==0)
 		return -1;
 	else if(e<0)
