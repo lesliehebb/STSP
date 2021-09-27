@@ -9,7 +9,7 @@
 #define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "transit31_i.in"
+#define DEFAULTFILENAME "koi340_actionU_ex.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -23,10 +23,10 @@
 #define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
 #define PRINTPLANETSPOTOVERLAP 0	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
 
-#define MAXSPOTS 10
+#define MAXSPOTS 20
 #define MAXPLANETS 1
-#define TWICEMAXSPOTSMAXPLANETS 20
-#define FOURMAXSPOTSMAXPLANETS 40
+#define TWICEMAXSPOTSMAXPLANETS 40
+#define FOURMAXSPOTSMAXPLANETS 80
 
 #define MAXNLDRINGS 100
 
@@ -54,14 +54,14 @@ char FIXSEEDEDONLYPHI;		//for partially seeded, fix only the phi's of seeds (not
 int  numseeded;
 int numspots,numplanets;
 long int starttime;
-double spotfracdark;
+double spotfracdark[MAXSPOTS];
 double sigmaradius,sigmaangle;
 FILE *outv,*outerr;
 int errorflag;
 int debuglcni,debugringi,debugtrial;
 int pvasc,pvisc;
 double *spotreport,*ldspotreport;
-char whichspots[16];
+char whichspots[MAXSPOTS];
 unsigned int ttt[16]={1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192,16384,32768};
 
 #if DEBUGMCMC
@@ -70,7 +70,7 @@ FILE *dbmcmc;
 #if XYZDETAILS
 FILE *xyzdetail;
 #endif
-
+//int whydoicrash;
 //FILE *debugellipse;
 
 typedef struct 
@@ -3079,7 +3079,8 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		printf("too many spots\n");
 		return -12;
 	}
-	spotfracdark=1.0-x[1];
+	for(i=0;i<MAXSPOTS;i++)
+		spotfracdark[i]=1.0-x[1];
 	
 	if(filereads(str,datastr,&a,e)<0)
 		return -13;
@@ -3159,7 +3160,12 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	if(str[0]!='L'&&str[0]!='l'&&str[0]!='H'&&str[0]!='h'&&str[0]!='S'&&str[0]!='s'&&str[0]!='D'&&str[0]!='d'&&str[0]!='T'&&str[0]!='t'&&str[0]!='x'&&str[0]!='X'&&str[0]!='f'&&str[0]!='F'&&str[0]!='p'&&str[0]!='P'&&str[0]!='u'&&str[0]!='U'&&str[0]!='I'&&str[0]!='i'&&str[0]!='a'&&str[0]!='A')
 		i=0;  //unseeded mcmc
 	else if(str[0]=='l')
-		i=1;	//generate light curve and vis file from parameters
+	{                       //generate light curve and vis file from parameters
+		if(str[1]=='v')
+			i=14; //variable spot darkness
+		else
+			i=1;	
+	}
 	else if(str[0]=='H'||str[0]=='h')
 		i=2;	//metropolis-hastings
 	else if(str[0]=='s')
@@ -3169,7 +3175,12 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	else if(str[0]=='T'||str[0]=='t')
 		i=5;	//totally seeded mcmc
 	else if(str[0]=='L')
-		i=6;	//generate light curve and vis file from parameter file
+	{                       //generate light curve and vis file from parameter file
+		if(str[1]=='v')
+			i=15;  //variable spot darkness
+		else
+			i=6;	
+	}
 	else if(str[0]=='S')
 		i=7;	//single seeded mcmc from parameter file
 	else if(str[0]=='f'||str[0]=='F')
@@ -3262,13 +3273,28 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 				return -33;
 		}
 	}
-	else if(i==1||i==12)
+	else if(i==1||i==12||i==14)
 	{	
+		if(i==14)
+		{
+			if(filereadd(numspots,x,datastr,&a,e)<0)
+				return -31;
+			for(b=0;b<numspots;b++)
+				spotfracdark[b]=1.0-x[b];
+		}
 		if(filereadd(numspots*3+1,readparam,datastr,&a,e)<0)
 				return -23;
 	}
-	else if(i==6||i==13)
+	else if(i==6||i==13||i==15)
 	{
+		if(i==15)
+		{
+			if(filereadd(numspots,x,datastr,&a,e)<0)
+				return -32;
+			for(b=0;b<numspots;b++)
+				spotfracdark[b]=1.0-x[b];
+		}
+
 		if(filereads(seedfilename,datastr,&a,e)<0)
 			return -24;
 		FILE *in;
@@ -3704,7 +3730,7 @@ char setspots(double p[],spotdata spot[MAXSPOTS],stardata *star,planetdata plane
 
 	for(i=0;i<numspots;i++)
 	{
-		spot[i].fracdarkness=spotfracdark;
+		spot[i].fracdarkness=spotfracdark[i];
 		spot[i].r=p[3*i];
 		if(spot[i].r<0||spot[i].r>star->r)
 			return 0;  //bad params
@@ -4937,7 +4963,7 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 {
 	int i,j,realnum;
 	double light,torig,l1,l2;
-	double dif,chisq;
+	double dif,chisq=0.0;
 	unsigned int whichspot;
 	FILE *lcout;
 
