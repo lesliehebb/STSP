@@ -5792,7 +5792,7 @@ int main(int argc,char *argv[])
 			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxstepsortime,rootname,3,readparam,seedfilename);
 		}
 	}
-	else if(j==1||j==6)
+	else if(j==1||j==6||j==14)
 	{
 #		if ANYPRINTVIS
 		PRINTVIS=WHICHPRINTVIS;
