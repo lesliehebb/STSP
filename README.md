@@ -1,14 +1,32 @@
 STSP
 ====
-
 In and out of transit starspot modeling code
+
+
+V5.0.1  2022-04
+
+This version corrects a bug dealing MAXSPOTS.   
+
+V5.0    2021-09
+
+Fix bug that allows printing out lcout.txt during Lv and lv actions 
+Added sample .in files for new bright spot contrast capabilities.
+Add ability to have bright spots.  Different spots can have different contrasts.
+
+
+V4.7    2021-02
+
+Added the ability to print the chi-squared of the solution to Action-L.
+Remove the option ALWAYSPRINTVIS
+Fixed a bug in Action-I
+
 
 V4.6    2017-08
 
 Added the functionality for determining the guess for the latitude
 and longitude of a spot based on the timeing of a starspot crossing
-feature.   Added the functionality for measuring the area covered 
-by spots in a transit chord.
+feature (action I).   Added the functionality for measuring the area covered 
+by spots in a transit chord (Action A).
 
 V4.5    2015-11-30
 
