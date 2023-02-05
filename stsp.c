@@ -9,7 +9,7 @@
 #define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
-#define DEFAULTFILENAME "koi340_actionU_ex.in"
+#define DEFAULTFILENAME "arctic_mdwarf_0330_1_L.in"
 
 #define ORDERSPOTSMETHOD 2			//0 ->order by latitude, 1->order by longitude, 2->hybrid ordering
 #define DOWNFROMMAX 11				//how many light curve points down from the max to call the max (for normalization) 
@@ -20,13 +20,13 @@
 #define USEOLDLDRING 0				//whether to use the old uniformly spaced limb darkening ring system
 
 #define ALWAYSAVERAGETIME 0			//whether to average time when using maxsteps (in mcmc)
-#define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 16 right now)
+#define PRINTWHICHSPOT 0			//whether to print WHICHSPOT for final output (limits number of spots to 32 right now)
 #define PRINTPLANETSPOTOVERLAP 0	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
 
-#define MAXSPOTS 20
+#define MAXSPOTS 32			//hard max at 32 for PRINTWHICHSPOT flag. 
 #define MAXPLANETS 1
-#define TWICEMAXSPOTSMAXPLANETS 40
-#define FOURMAXSPOTSMAXPLANETS 80
+#define TWICEMAXSPOTSMAXPLANETS 60
+#define FOURMAXSPOTSMAXPLANETS 120
 
 #define MAXNLDRINGS 100
 
@@ -42,7 +42,7 @@
 #define ORDERSPOTNEARNESS (0.1745)
 
 #define DEBUGMCMC 0
-#define XYZDETAILS 1
+#define XYZDETAILS 0
 
 int NLDRINGS;				//number of rings for limb darkening
 char PRINTVIS;				//whether to print a vis file
@@ -2963,7 +2963,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 {
 	int i,a,b,e;
 	char str[128],datastr[4096];
-	double x[9],stardensity,ppdays;
+	double x[MAXSPOTS],stardensity,ppdays;
 	double lda[5];		//limb darkening coeffecients (really just 4)
 	
 	e=prepfileread(filename,datastr,4096);
@@ -3169,7 +3169,12 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	else if(str[0]=='H'||str[0]=='h')
 		i=2;	//metropolis-hastings
 	else if(str[0]=='s')
-		i=3;	//single seeded mcmc from parameters
+	{
+		if(str[1]=='v')
+			i=16;	//single seeded mcmc from parameters with variable spot darkness
+		else
+			i=3;	//single seeded mcmc from parameters
+	}
 	else if(str[0]=='D'||str[0]=='d')
 		i=4;	//debug
 	else if(str[0]=='T'||str[0]=='t')
@@ -3177,12 +3182,17 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	else if(str[0]=='L')
 	{                       //generate light curve and vis file from parameter file
 		if(str[1]=='v')
-			i=15;  //variable spot darkness
+			i=15;		//variable spot darkness
 		else
 			i=6;	
 	}
 	else if(str[0]=='S')
-		i=7;	//single seeded mcmc from parameter file
+	{
+		if(str[1]=='v')
+			i=17;	//single seeded mcmc from parameter file with variable spot darkness
+		else
+			i=7;	//single seeded mcmc from parameter file
+	}
 	else if(str[0]=='f'||str[0]=='F')
 	{
 		FIXTHETAS=1;
@@ -3211,7 +3221,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		i=101;	//X
 
 	numseeded=0;  //unless set below
-	if(i==0||i==3||i==5||i==7||i==8||i==10)
+	if(i==0||i==3||i==5||i==7||i==8||i==10||i==17)
 	{
 		if(filereadd(5,x,datastr,&a,e)<0)
 			return -18;
@@ -3220,18 +3230,18 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		*mcmcnpop=(int)x[2];
 		*mcmcmaxstepsortime=(long int)x[3];
 		CALCBRIGHTNESSFACTOR=(char)x[4];
-		if(i==3||i==7)
+		if(i==3||i==7||i==16||i==17)
 		{
 			if(filereadd(2,x,datastr,&a,e)<0)
 				return -19;
 			sigmaradius=x[0];
 			sigmaangle=x[1];
 		}
-		if(i==5||i==7)
+		if(i==5||i==7||i==17)
 		{
 			if(filereads(seedfilename,datastr,&a,e)<0)
 				return -20;
-			if(i==7)
+			if(i==7||i==17)
 			{
 				FILE *in;
 				printf("parameter file: %s\n",seedfilename);
@@ -3240,13 +3250,28 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 					return -21;
 				for(b=0;b<numspots*3+1;b++)
 					fscanf(in,"%lf\n",&readparam[b]);
+				if(i==17)
+				{
+					for(b=0;b<numspots;b++)
+					{
+						fscanf(in,"%lf\n",&x[0]);
+						spotfracdark[b]=1.0-x[0];
+					}
+				}
 				fclose(in);
 			}
 		}
-		else if(i==3)
+		else if(i==3||i==16)
 		{
 			if(filereadd(numspots*3+1,readparam,datastr,&a,e)<0)
 				return -22;
+			if(i==16)
+			{
+				if(filereadd(numspots,x,datastr,&a,e)<0)
+					return -31;
+				for(b=0;b<numspots;b++)
+					spotfracdark[b]=1.0-x[b];
+			}
 		}
 		else if(i==8)
 		{
@@ -3275,6 +3300,8 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 	}
 	else if(i==1||i==12||i==14)
 	{	
+		if(filereadd(numspots*3+1,readparam,datastr,&a,e)<0)
+				return -23;
 		if(i==14)
 		{
 			if(filereadd(numspots,x,datastr,&a,e)<0)
@@ -3282,8 +3309,7 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 			for(b=0;b<numspots;b++)
 				spotfracdark[b]=1.0-x[b];
 		}
-		if(filereadd(numspots*3+1,readparam,datastr,&a,e)<0)
-				return -23;
+
 	}
 	else if(i==6||i==13||i==15)
 	{
@@ -3302,6 +3328,14 @@ int initializestarplanet(stardata *star,planetdata planet[MAXPLANETS],char filen
 		in=fopen(seedfilename,"r");
 		for(b=0;b<numspots*3+1;b++)
 			fscanf(in,"%lf\n",&readparam[b]);
+		if(i==15)
+		{
+			for(b=0;b<numspots;b++)
+			{
+				fscanf(in,"%lf\n",&x[0]);
+				spotfracdark[b]=1.0-x[0];
+			}
+		}
 		fclose(in);
 		b=0;
 		while(seedfilename[b]!=0&&b<64)
@@ -4890,10 +4924,12 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 
 	for(j=0;j<nparam;j++)
 		fprintf(parambest,"%0.12lf\n",bestparam[j]);
+	for(j=0;j<numspots;j++)
+		fprintf(parambest,"%0.5lf\n",1.0-spotfracdark[j]);
 	fprintf(parambest,"%lf    chi squared\n",bestchisq);
 	(void)setspots(bestparam,spot,star,planet);
 	for(j=0;j<numspots;j++)
-		fprintf(parambest,"%lf    radius\n%lf    theta\n%lf    phi\n",spot[j].r,spot[j].thetarel*180.0/PI,spot[j].phirel*180/PI);
+		fprintf(parambest,"%lf    radius\n%lf    theta\n%lf    phi\n%lf    contrast\n",spot[j].r,spot[j].thetarel*180.0/PI,spot[j].phirel*180/PI,1.0-spotfracdark[j]);
 	fprintf(parambest,"%lf     unoccluded brightness\n",star->brightnessfactor*star->area/lclightnorm);
 
 #	if ANYPRINTVIS
@@ -4908,6 +4944,8 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 #		if PRINTWHICHSPOT
 			for(j=0;j<16;j++)
 				whichspots[j]=0;
+			for(j=16;j<MAXSPOTS;j++)
+				whichspots[j]=0;
 #		endif
 		z=lightness(lctime[i],star,planet,spot);
 #		if UNNORMALIZEOUTPUT
@@ -4921,6 +4959,10 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 				for(j=0;j<16;j++)
 					whichspot+=whichspots[j]*ttt[j];
 				fprintf(bestlc," %i",whichspot);
+				whichspot=0;
+				for(j=16;j<MAXSPOTS;j++)
+					whichspot+=whichspots[j]*ttt[j];
+				fprintf(bestlc," %i",whichspot);
 #			endif
 			fprintf(bestlc,"\n");
 #		else
@@ -4932,6 +4974,10 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 #			if PRINTWHICHSPOT
 				whichspot=0;
 				for(j=0;j<16;j++)
+					whichspot+=whichspots[j]*ttt[j];
+				fprintf(bestlc," %i",whichspot);
+				whichspot=0;
+				for(j=17;j<MAXSPOTS;j++)
 					whichspot+=whichspots[j]*ttt[j];
 				fprintf(bestlc," %i",whichspot);
 #			endif
@@ -4994,6 +5040,10 @@ void lcgen(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],
 			for(j=0;j<16;j++)
 				whichspot+=whichspots[j]*ttt[j];
 			fprintf(lcout," %i",whichspot);
+			whichspot=0;
+			for(j=17;j<MAXSPOTS;j++)
+				whichspot+=whichspots[j]*ttt[j];
+			fprintf(lcout," %i",whichspot);
 #		endif
 #		if PRINTPLANETSPOTOVERLAP
 			realnum=numplanets;
@@ -5031,7 +5081,7 @@ void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAX
 	FILE *in,*out;
 	int i,j;
 	double tday,t,theta,phi;
-	double r[3],xhat[3],zhat[3],dp,rp[3];
+	double rhat[3],xhat[3],yhat[3],zhat[3],dp,rp[3];
 
 	in=fopen(infilename,"r");
 
@@ -5051,23 +5101,25 @@ void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAX
 	zhat[1]=0.0;
 	zhat[2]=cos(star->theta);
 
+	fscanf(in,"%lf",&tday);
 	while(!feof(in))
 	{
-		fscanf(in,"%lf",&tday);
 		t=(tday-planet[0].lct0)*86400.0;
 
 		star->phi=star->omega*t;
 		xhat[0]=cos(star->theta)*cos(star->phi);
 		xhat[1]=sin(star->phi);
 		xhat[2]=(-1.0)*sin(star->theta)*cos(star->phi);
-
+		yhat[0]=(-1.0)*cos(star->theta)*sin(star->phi);
+		yhat[1]=cos(star->phi);
+		yhat[2]=sin(star->theta)*sin(star->phi);
 		fprintf(out,"%0.9lf ",tday);
 		for(i=0;i<numplanets;i++)
 		{
 			setplanetpos(t,planet,i);
 			if(planet[i].x>0)	//planet is in front of star
 			{
-				if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
+				/*if(sqrt(planet[i].y*planet[i].y+planet[i].z*planet[i].z)-planet[i].r<star->r)
 				{
 					r[0]=sqrt(star->rsq-planet[i].y*planet[i].y+planet[i].z*planet[i].z)/star->r;
 					r[1]=planet[i].y/star->r;
@@ -5082,6 +5134,25 @@ void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAX
 					dp=r[0]*xhat[0]+r[1]*xhat[1]+r[2]*xhat[2];
 					phi=acos(dp);
 					fprintf(out,"%0.9lf %0.9lf\n",theta,phi);
+				}  */
+				if(planet[i].y*planet[i].y+planet[i].z*planet[i].z<star->rsq)
+				{
+					rhat[1]=planet[i].y/star->r;
+					rhat[2]=planet[i].z/star->r;
+					rhat[0]=sqrt(1-rhat[1]*rhat[1]+rhat[2]*rhat[2]);
+					dp=rhat[0]*zhat[0]+rhat[1]*zhat[1]+rhat[2]*zhat[2];
+					theta=acos(dp);
+					for(j=0;j<3;j++)
+						rp[j]=rhat[j]-dp*zhat[j];
+					dp=sqrt(rp[0]*rp[0]+rp[1]*rp[1]+rp[2]*rp[2]);
+					for(j=0;j<3;j++)
+						rp[j]=rp[j]/dp;
+					dp=rp[0]*xhat[0]+rp[1]*xhat[1]+rp[2]*xhat[2];
+					phi=acos(dp);									 //acos() returns an angle between 0 and PI
+					dp=rp[0]*yhat[0]+rp[1]*yhat[1]+rp[2]*yhat[2];
+					if(dp<0)
+						phi=PIt2-phi;
+					fprintf(out,"%0.9lf %0.9lf\n",theta,phi);
 				}
 				else
 					fprintf(out,"planet center not over star\n");
@@ -5089,6 +5160,7 @@ void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAX
 			else
 				fprintf(out,"planet behind star\n");
 		}
+		fscanf(in,"%lf",&tday);
 	}
 	fclose(in);
 	fclose(out);
@@ -5760,7 +5832,7 @@ int main(int argc,char *argv[])
 #		endif
 #	endif
 
-	if(j==0||j==3||j==5||j==7||j==8||j==10)
+	if(j==0||j==3||j==5||j==7||j==8||j==10||j==16||j==17)
 	{
 		PRINTVIS=0;
 		if(j==0||j==8)
@@ -5770,7 +5842,7 @@ int main(int argc,char *argv[])
 #			endif
 			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxstepsortime,rootname,0,readparam,seedfilename);
 		}
-		else if(j==3||j==7)
+		else if(j==3||j==7||j==16||j==17)
 		{
 #			if !QUIET
 				printf("starting seeded mcmc\n");
@@ -5792,7 +5864,7 @@ int main(int argc,char *argv[])
 			mcmc(star,planet,spot,lcn,lctime,lclight,lcuncertainty,lclightnorm,ascale,mcmcnpop,mcmcmaxstepsortime,rootname,3,readparam,seedfilename);
 		}
 	}
-	else if(j==1||j==6||j==14)
+	else if(j==1||j==6||j==14||j==15)
 	{
 #		if ANYPRINTVIS
 		PRINTVIS=WHICHPRINTVIS;
