@@ -5,7 +5,7 @@
 
 #define QUIET 0				//0 -> prints things, 1 -> only prints errors
 #define QUIETMCMC 0			//0 -> mcmc prints as it goes, 1-> stays quiet (0 overridden by QUIET)
-#define WHICHPRINTVIS 1		// what sort of visualization file to output (j-1,g-2)
+#define WHICHPRINTVIS 2		// what sort of visualization file to output (j-1,g-2)
 #define ANYPRINTVIS 1		//0 for speed, overrides other PRINTVIS preferences
 #define UNNORMALIZEOUTPUT 1	//1 -> undoes internal normalization before outputting 
 #define PRINTEACHSPOT 0
@@ -20,7 +20,7 @@
 #define USEOLDLDRING 0				//whether to use the old uniformly spaced limb darkening ring system
 
 #define ALWAYSAVERAGETIME 0			//whether to average time when using maxsteps (in mcmc)
-#define PRINTWHICHSPOT 0			//whether to print WHICHSPOT for final output (limits number of spots to 32 right now)
+#define PRINTWHICHSPOT 1			//whether to print WHICHSPOT for final output (limits number of spots to 32 right now)
 #define PRINTPLANETSPOTOVERLAP 0	//whether to print planet-spot overlap (lcgen only), may not work with flattened lightcurve
 
 #define MAXSPOTS 32			//hard max at 32 for PRINTWHICHSPOT flag. 
@@ -4380,6 +4380,8 @@ void plotdata(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOT
 	FILE *out,*outppm,*in;
 
 	innotout=1;  //1 for reading previous run's data and changing the colors
+    in=NULL;
+    out=NULL;
 
 	sprintf(filename,"%s_%i_plotdata.txt",rootname,varyspot);
 	if(innotout)
@@ -4493,6 +4495,7 @@ void mcmc(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXSPOTS],i
 #	if DEBUGMCMC
 		int d;
 #	endif
+    in=NULL;
 
 	nparam=3*numspots+1; //r, theta, phi of spots, then unoccluded star brightness factor
 
@@ -5139,7 +5142,7 @@ void initialguess(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAX
 				{
 					rhat[1]=planet[i].y/star->r;
 					rhat[2]=planet[i].z/star->r;
-					rhat[0]=sqrt(1-rhat[1]*rhat[1]+rhat[2]*rhat[2]);
+					rhat[0]=sqrt(1-(rhat[1]*rhat[1]+rhat[2]*rhat[2]));
 					dp=rhat[0]*zhat[0]+rhat[1]*zhat[1]+rhat[2]*zhat[2];
 					theta=acos(dp);
 					for(j=0;j<3;j++)
@@ -5614,6 +5617,7 @@ void gentimetest(stardata *star,planetdata planet[MAXPLANETS],spotdata spot[MAXS
 	double decayfrat=100.0; //ratio involved with decay time
 	double dfoPI;
 	FILE *lcout;
+    lcout=NULL;
 
 	dfoPI=decayfrat/PI;
 	PRINTVIS=WHICHPRINTVIS;
